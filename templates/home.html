@@ -1,0 +1,105 @@
+{{define "title"}}DukeCam — Projects{{end}}
+
+{{define "header_right"}}<a href="/admin" class="text-duke-light hover:text-white transition-colors">Admin</a>{{end}}
+
+{{define "content"}}
+{{if .ProjectData}}
+<div class="divide-y divide-gray-200">
+    {{range $ps := .ProjectData}}
+    <a href="/p/{{$ps.Project.Slug}}" class="flex items-center gap-4 px-5 py-4 bg-white hover:bg-gray-50 transition-colors no-underline text-inherit relative group">
+        <!-- Cover thumbnail -->
+        <div class="w-20 h-20 min-w-[5rem] rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+            {{if $ps.RecentPhotos}}
+            <img src="/media/thumb/{{$ps.Project.Slug}}/{{(index $ps.RecentPhotos 0).Filename}}"
+                 class="w-full h-full object-cover" alt="" loading="lazy">
+            {{else}}
+            <div class="w-full h-full flex items-center justify-center text-3xl text-gray-300">📷</div>
+            {{end}}
+        </div>
+
+        <!-- Info -->
+        <div class="flex-1 min-w-0">
+            <div class="text-[17px] font-bold text-duke-dark truncate">{{$ps.Project.Name}}</div>
+            <div class="text-sm text-gray-500 truncate">{{deref $ps.Project.Address}}</div>
+            <div class="text-xs text-gray-400 mt-0.5">
+                {{if $ps.LastUpdated}}Updated {{formatDateTime $ps.LastUpdated}}{{end}}
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="flex gap-6 flex-shrink-0">
+            <div class="text-center">
+                <div class="text-[11px] text-gray-500 uppercase tracking-wide">Photos</div>
+                <div class="text-2xl font-bold text-duke-dark">{{$ps.PhotoCount}}</div>
+            </div>
+            {{if $ps.RecentWorkers}}
+            <div class="text-center">
+                <div class="text-[11px] text-gray-500 uppercase tracking-wide">Team</div>
+                <div class="flex gap-1 justify-center mt-1 flex-wrap">
+                    {{range $ps.RecentWorkers}}
+                    <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-duke-teal text-white text-[11px] font-bold">{{initials .}}</span>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+        </div>
+
+        <!-- Recent photos strip (desktop) -->
+        <div class="hidden lg:flex gap-1.5 flex-shrink-0">
+            {{range $ps.RecentPhotos}}
+            <img src="/media/thumb/{{$ps.Project.Slug}}/{{.Filename}}"
+                 class="w-20 h-20 object-cover rounded-md bg-gray-100" alt="" loading="lazy">
+            {{end}}
+        </div>
+
+        <!-- Share button -->
+        <div onclick="event.preventDefault(); event.stopPropagation(); copyShareLink('{{$ps.Project.Slug}}', '{{$ps.Project.Name}}')"
+             class="flex-shrink-0 w-10 h-10 flex items-center justify-center border-2 border-gray-200 rounded-lg text-lg cursor-pointer hover:border-duke-teal transition-colors">
+            🔗
+        </div>
+    </a>
+    {{end}}
+</div>
+{{else}}
+<div class="text-center py-16 text-gray-500">
+    <div class="text-5xl mb-3">📷</div>
+    <p class="text-lg">No projects yet.</p>
+    <p class="mt-2 text-sm">Go to <a href="/admin" class="text-duke-teal font-semibold">Admin</a> to create one.</p>
+</div>
+{{end}}
+
+{{template "home_scripts" .}}
+{{end}}
+
+{{define "home_scripts"}}
+<script>
+function copyShareLink(slug, name) {
+    var url = window.location.origin + '/share/' + slug;
+    if (navigator.share) {
+        navigator.share({ title: name + ' — DukeCam', url: url });
+    } else if (navigator.clipboard) {
+        navigator.clipboard.writeText(url).then(function() {
+            showToast('Share link copied!', 'success');
+        });
+    } else {
+        prompt('Share link:', url);
+    }
+}
+
+function showToast(message, type) {
+    var container = document.getElementById('toast-container');
+    var toast = document.createElement('div');
+    toast.className = 'toast pointer-events-auto px-5 py-3 rounded-lg text-sm font-semibold shadow-lg ' +
+        (type === 'success' ? 'bg-green-600 text-white' :
+         type === 'error' ? 'bg-red-600 text-white' :
+         'bg-duke-dark text-white');
+    toast.textContent = message;
+    container.appendChild(toast);
+    requestAnimationFrame(function() { toast.classList.add('show'); });
+    setTimeout(function() {
+        toast.classList.remove('show');
+        setTimeout(function() { toast.remove(); }, 300);
+    }, 3500);
+}
+</script>
+{{end}}

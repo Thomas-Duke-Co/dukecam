@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DukeCam vs CompanyCam — Cost Comparison</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7f8; color: #212529; }
+        
+        .page { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+        
+        /* Header */
+        .header { text-align: center; margin-bottom: 48px; }
+        .header h1 { font-size: 36px; color: #023645; margin-bottom: 8px; }
+        .header .subtitle { font-size: 18px; color: #6c757d; }
+        .header .logo-row { display: flex; align-items: center; justify-content: center; gap: 24px; margin-top: 20px; }
+        .header .logo-row img { height: 36px; }
+        .header .vs { font-size: 24px; font-weight: 700; color: #aaa; }
+
+        /* Savings Hero */
+        .savings-hero {
+            background: linear-gradient(135deg, #006778 0%, #023645 100%);
+            color: white;
+            border-radius: 16px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 48px;
+            box-shadow: 0 8px 32px rgba(0, 103, 120, 0.3);
+        }
+        .savings-hero .amount { font-size: 72px; font-weight: 800; line-height: 1; }
+        .savings-hero .period { font-size: 24px; opacity: 0.8; margin-top: 4px; }
+        .savings-hero .detail { font-size: 16px; opacity: 0.7; margin-top: 16px; }
+        .savings-row {
+            display: flex; gap: 24px; justify-content: center; margin-top: 32px;
+        }
+        .savings-stat {
+            background: rgba(255,255,255,0.15);
+            border-radius: 12px;
+            padding: 20px 32px;
+            text-align: center;
+        }
+        .savings-stat .num { font-size: 32px; font-weight: 700; }
+        .savings-stat .label { font-size: 13px; opacity: 0.8; margin-top: 4px; }
+
+        /* Comparison Table */
+        .comparison { margin-bottom: 48px; }
+        .comparison h2 { font-size: 24px; color: #023645; margin-bottom: 20px; text-align: center; }
+        
+        .comp-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .comp-table thead th {
+            padding: 16px 20px;
+            text-align: left;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: white;
+        }
+        .comp-table thead th:first-child { background: #6c757d; }
+        .comp-table thead th:nth-child(2) { background: #0967db; }
+        .comp-table thead th:nth-child(3) { background: #006778; }
+        
+        .comp-table td {
+            padding: 14px 20px;
+            border-bottom: 1px solid #eee;
+            font-size: 15px;
+        }
+        .comp-table tr:last-child td { border-bottom: none; }
+        .comp-table td:first-child { font-weight: 600; color: #333; }
+        
+        .check { color: #28a745; font-weight: 700; }
+        .cross { color: #dc3545; }
+        .highlight { background: rgba(0, 103, 120, 0.05); }
+
+        /* Screenshots */
+        .screenshots { margin-bottom: 48px; }
+        .screenshots h2 { font-size: 24px; color: #023645; margin-bottom: 20px; text-align: center; }
+        .screenshot-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+        .screenshot-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .screenshot-card .label {
+            padding: 12px 16px;
+            font-weight: 700;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: white;
+        }
+        .screenshot-card .label.cc { background: #0967db; }
+        .screenshot-card .label.dc { background: #006778; }
+        .screenshot-card img {
+            width: 100%;
+            display: block;
+        }
+
+        /* Cost Breakdown */
+        .cost-breakdown { margin-bottom: 48px; }
+        .cost-breakdown h2 { font-size: 24px; color: #023645; margin-bottom: 20px; text-align: center; }
+        .cost-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+        .cost-card {
+            background: white;
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .cost-card h3 {
+            font-size: 18px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .cost-card h3 .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+        .cost-card h3 .dot.cc { background: #0967db; }
+        .cost-card h3 .dot.dc { background: #006778; }
+        .cost-card .line-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+        }
+        .cost-card .line-item:last-child { border-bottom: none; }
+        .cost-card .total {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0 0;
+            margin-top: 8px;
+            border-top: 2px solid #023645;
+            font-weight: 700;
+            font-size: 18px;
+        }
+        .cost-card .total.free { color: #006778; }
+
+        /* Bottom line */
+        .bottom-line {
+            background: white;
+            border-radius: 12px;
+            padding: 32px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .bottom-line h2 { font-size: 24px; color: #023645; margin-bottom: 16px; }
+        .bottom-line p { font-size: 16px; color: #6c757d; max-width: 700px; margin: 0 auto; line-height: 1.6; }
+        .bottom-line .url { 
+            display: inline-block; margin-top: 16px; padding: 12px 24px;
+            background: #006778; color: white; border-radius: 8px;
+            text-decoration: none; font-weight: 700; font-size: 16px;
+        }
+
+        @media print {
+            body { background: white; }
+            .page { padding: 20px; }
+            .savings-hero { box-shadow: none; border: 2px solid #006778; }
+            .screenshot-card, .cost-card, .bottom-line { box-shadow: none; border: 1px solid #ddd; }
+        }
+    </style>
+</head>
+<body>
+<div class="page">
+
+    <div class="header">
+        <h1>DukeCam vs CompanyCam</h1>
+        <div class="subtitle">Construction Photo Documentation — Cost & Feature Comparison</div>
+    </div>
+
+    <!-- Savings Hero -->
+    <div class="savings-hero">
+        <div class="amount">$6,276</div>
+        <div class="period">saved per year</div>
+        <div class="detail">by switching from CompanyCam Premium to DukeCam (self-hosted)</div>
+        <div class="savings-row">
+            <div class="savings-stat">
+                <div class="num">$523</div>
+                <div class="label">CompanyCam / month</div>
+            </div>
+            <div class="savings-stat">
+                <div class="num">$0</div>
+                <div class="label">DukeCam / month</div>
+            </div>
+            <div class="savings-stat">
+                <div class="num">14</div>
+                <div class="label">Active users</div>
+            </div>
+            <div class="savings-stat">
+                <div class="num">898+</div>
+                <div class="label">Photos imported</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Comparison -->
+    <div class="comparison">
+        <h2>Feature Comparison</h2>
+        <table class="comp-table">
+            <thead>
+                <tr>
+                    <th>Feature</th>
+                    <th>CompanyCam Premium</th>
+                    <th>DukeCam (Self-Hosted)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Monthly Cost</td>
+                    <td>$523/mo ($37.36/user × 14)</td>
+                    <td class="highlight"><span class="check">$0/mo</span> — runs on existing server</td>
+                </tr>
+                <tr>
+                    <td>Annual Cost</td>
+                    <td>$6,276/year</td>
+                    <td class="highlight"><span class="check">$0/year</span></td>
+                </tr>
+                <tr>
+                    <td>Per-User Fee</td>
+                    <td>$37.36/user/month</td>
+                    <td class="highlight"><span class="check">Unlimited users, no charge</span></td>
+                </tr>
+                <tr>
+                    <td>Photo Upload</td>
+                    <td><span class="check">✓</span> Camera + gallery</td>
+                    <td><span class="check">✓</span> Camera + gallery + drag &amp; drop</td>
+                </tr>
+                <tr>
+                    <td>Offline / Poor Signal</td>
+                    <td><span class="check">✓</span> Native app queue</td>
+                    <td><span class="check">✓</span> IndexedDB queue, auto-retry, PWA</td>
+                </tr>
+                <tr>
+                    <td>No Login Required</td>
+                    <td><span class="cross">✗</span> Each user needs account</td>
+                    <td class="highlight"><span class="check">✓</span> Pick name from dropdown, cookie remembers</td>
+                </tr>
+                <tr>
+                    <td>Project QR Codes</td>
+                    <td><span class="check">✓</span></td>
+                    <td><span class="check">✓</span> Branded in Duke teal</td>
+                </tr>
+                <tr>
+                    <td>Day-Grouped Timeline</td>
+                    <td><span class="check">✓</span></td>
+                    <td><span class="check">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Photo Tags</td>
+                    <td><span class="check">✓</span> Custom tags</td>
+                    <td><span class="check">✓</span> Progress / Before / After / Issue</td>
+                </tr>
+                <tr>
+                    <td>Shareable Gallery Links</td>
+                    <td><span class="check">✓</span></td>
+                    <td><span class="check">✓</span> With OG previews for iMessage/Slack</td>
+                </tr>
+                <tr>
+                    <td>EXIF / GPS Extraction</td>
+                    <td><span class="check">✓</span></td>
+                    <td><span class="check">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Recent User Initials</td>
+                    <td><span class="check">✓</span></td>
+                    <td><span class="check">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Photo Count per Project</td>
+                    <td><span class="check">✓</span></td>
+                    <td><span class="check">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Recent Photos Preview</td>
+                    <td><span class="check">✓</span> 4 thumbnails</td>
+                    <td><span class="check">✓</span> 4 thumbnails</td>
+                </tr>
+                <tr>
+                    <td>Data Ownership</td>
+                    <td><span class="cross">✗</span> Stored on CompanyCam servers</td>
+                    <td class="highlight"><span class="check">✓</span> 100% on our servers</td>
+                </tr>
+                <tr>
+                    <td>Custom Branding</td>
+                    <td><span class="cross">✗</span> CompanyCam branding</td>
+                    <td class="highlight"><span class="check">✓</span> Thomas Duke logo &amp; colors</td>
+                </tr>
+                <tr>
+                    <td>Map View</td>
+                    <td><span class="check">✓</span></td>
+                    <td><span class="cross">✗</span> Planned</td>
+                </tr>
+                <tr>
+                    <td>Annotations (Draw on Photos)</td>
+                    <td><span class="check">✓</span></td>
+                    <td><span class="cross">✗</span> Planned</td>
+                </tr>
+                <tr>
+                    <td>Native Mobile App</td>
+                    <td><span class="check">✓</span> iOS + Android</td>
+                    <td><span class="check">✓</span> PWA (installable, no app store needed)</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Side-by-Side Screenshots -->
+    <div class="screenshots">
+        <h2>Side-by-Side: Project Dashboard</h2>
+        <div class="screenshot-grid">
+            <div class="screenshot-card">
+                <div class="label cc">CompanyCam — $523/month</div>
+                <img src="companycam-projects.png" alt="CompanyCam Projects View">
+            </div>
+            <div class="screenshot-card">
+                <div class="label dc">DukeCam — $0/month</div>
+                <img src="dukecam-projects.png" alt="DukeCam Projects View">
+            </div>
+        </div>
+    </div>
+
+    <!-- Cost Breakdown -->
+    <div class="cost-breakdown">
+        <h2>Cost Breakdown</h2>
+        <div class="cost-grid">
+            <div class="cost-card">
+                <h3><span class="dot cc"></span> CompanyCam Premium</h3>
+                <div class="line-item"><span>Plan</span><span>Premium</span></div>
+                <div class="line-item"><span>Active Users</span><span>14</span></div>
+                <div class="line-item"><span>Per-User Cost</span><span>$37.36/mo</span></div>
+                <div class="line-item"><span>Monthly Total</span><span>$523.00</span></div>
+                <div class="total"><span>Annual Total</span><span>$6,276.00</span></div>
+            </div>
+            <div class="cost-card">
+                <h3><span class="dot dc"></span> DukeCam (Self-Hosted)</h3>
+                <div class="line-item"><span>Server</span><span>$0 (existing Framework)</span></div>
+                <div class="line-item"><span>Database</span><span>$0 (existing PostgreSQL)</span></div>
+                <div class="line-item"><span>Domain / SSL</span><span>$0 (existing Cloudflare)</span></div>
+                <div class="line-item"><span>Storage</span><span>$0 (existing infrastructure)</span></div>
+                <div class="line-item"><span>Per-User Cost</span><span>$0 (unlimited)</span></div>
+                <div class="total free"><span>Annual Total</span><span>$0.00</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3-Year Projection -->
+    <div class="comparison">
+        <h2>3-Year Cost Projection</h2>
+        <table class="comp-table">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>CompanyCam</th>
+                    <th>DukeCam</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Year 1</td>
+                    <td>$6,276</td>
+                    <td class="highlight"><span class="check">$0</span></td>
+                </tr>
+                <tr>
+                    <td>Year 2</td>
+                    <td>$12,552</td>
+                    <td class="highlight"><span class="check">$0</span></td>
+                </tr>
+                <tr>
+                    <td>Year 3</td>
+                    <td>$18,828</td>
+                    <td class="highlight"><span class="check">$0</span></td>
+                </tr>
+                <tr>
+                    <td>If team grows to 20 users (Year 1)</td>
+                    <td>$8,966</td>
+                    <td class="highlight"><span class="check">$0</span> — still free</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Bottom Line -->
+    <div class="bottom-line">
+        <h2>The Bottom Line</h2>
+        <p>
+            DukeCam delivers the same core functionality your team uses daily — photo uploads, 
+            day-grouped timelines, project QR codes, and shareable galleries — at <strong>zero ongoing cost</strong>. 
+            All 898 photos have already been migrated. The biggest advantage: <strong>no per-user fees</strong>, 
+            so your team can grow without the bill growing with it.
+        </p>
+        <a href="https://dukecam.thomasduke.io" class="url">Try DukeCam →</a>
+    </div>
+
+</div>
+</body>
+</html>

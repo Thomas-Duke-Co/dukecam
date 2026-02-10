@@ -1,0 +1,314 @@
+{{define "title"}}{{.Project.Name}} — DukeCam{{end}}
+{{define "header_right"}}{{.Project.Name}}{{end}}
+
+{{define "content"}}
+<!-- Upload Section -->
+<div class="bg-white rounded-xl mx-4 mt-4 p-5 shadow-sm">
+    <h2 class="text-lg font-bold text-duke-dark mb-4">📸 Upload Photos</h2>
+
+    <!-- Worker Picker -->
+    <div class="mb-4">
+        <label for="worker-select" class="block text-sm font-semibold text-duke-dark mb-1.5">
+            Who are you? <span class="font-normal text-gray-400 text-xs">(optional)</span>
+        </label>
+        <select id="worker-select" onchange="workerChanged()"
+                class="w-full px-3 py-3 border-2 border-gray-200 rounded-lg text-base bg-white focus:border-duke-teal focus:outline-none appearance-auto">
+            <option value="">— Select your name —</option>
+            {{range .Workers}}
+            <option value="{{.ID}}">{{.Name}}</option>
+            {{end}}
+            <option value="other">Someone else...</option>
+        </select>
+        <input type="text" id="other-name" placeholder="Type your name"
+               class="hidden mt-2 w-full px-3 py-3 border-2 border-gray-200 rounded-lg text-base focus:border-duke-teal focus:outline-none">
+    </div>
+
+    <!-- Tags -->
+    <div class="flex gap-2 mb-4 flex-wrap">
+        <button class="tag-btn px-4 py-2 border-2 border-gray-200 rounded-full text-sm font-semibold cursor-pointer transition-all text-duke-teal hover:border-duke-teal" data-tag="progress" onclick="toggleTag(this)">🔨 Progress</button>
+        <button class="tag-btn px-4 py-2 border-2 border-gray-200 rounded-full text-sm font-semibold cursor-pointer transition-all text-cyan-600 hover:border-cyan-600" data-tag="before" onclick="toggleTag(this)">📋 Before</button>
+        <button class="tag-btn px-4 py-2 border-2 border-gray-200 rounded-full text-sm font-semibold cursor-pointer transition-all text-green-600 hover:border-green-600" data-tag="after" onclick="toggleTag(this)">✅ After</button>
+        <button class="tag-btn px-4 py-2 border-2 border-gray-200 rounded-full text-sm font-semibold cursor-pointer transition-all text-red-600 hover:border-red-600" data-tag="issue" onclick="toggleTag(this)">⚠️ Issue</button>
+    </div>
+
+    <!-- Caption -->
+    <textarea id="caption" rows="2" placeholder="Add a caption (optional)"
+              class="w-full px-3 py-3 border-2 border-gray-200 rounded-lg text-base mb-4 resize-none focus:border-duke-teal focus:outline-none"></textarea>
+
+    <!-- Camera Button -->
+    <label for="camera-input"
+           class="block w-full py-4 bg-duke-teal text-white text-center text-lg font-bold rounded-xl cursor-pointer active:bg-duke-dark transition-colors mb-3">
+        📷 Take Photo
+    </label>
+    <input type="file" id="camera-input" accept="image/*" capture="environment" class="hidden">
+
+    <!-- File Picker / Drop Zone -->
+    <label for="file-input" id="drop-area"
+           class="block border-3 border-dashed border-gray-300 rounded-xl py-8 px-4 text-center cursor-pointer transition-all hover:border-duke-teal active:border-duke-teal active:bg-duke-teal/5 mb-4"
+           style="border-width: 3px;">
+        <div class="text-5xl mb-2">📁</div>
+        <p class="text-base text-gray-500 font-semibold">Choose from gallery or drop files</p>
+        <div class="text-xs text-gray-400 mt-1">JPG, PNG, HEIC • Max 50MB each</div>
+    </label>
+    <input type="file" id="file-input" accept="image/*" multiple class="hidden">
+
+    <!-- Upload Status -->
+    <div id="upload-status" class="hidden px-4 py-2.5 rounded-lg text-sm text-center"></div>
+
+    <!-- Upload Queue -->
+    <div class="mt-4 space-y-2" id="upload-queue"></div>
+</div>
+
+<!-- Photo Gallery -->
+<div class="px-4 pb-6">
+    <h2 class="text-lg font-bold text-duke-dark pt-4 mb-3">📸 Photos ({{.PhotoCount}})</h2>
+
+    {{if .DayGroups}}
+    {{range $dg := .DayGroups}}
+    <div class="mb-6">
+        <div class="flex items-center justify-between py-3 border-b-2 border-duke-teal mb-3">
+            <span class="text-base font-bold text-duke-dark">{{$dg.Label}}</span>
+            <span class="text-sm text-gray-500 font-semibold">{{len $dg.Photos}} photos</span>
+        </div>
+        <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
+            {{range $dg.Photos}}
+            <div class="photo-tile relative rounded-lg overflow-hidden bg-gray-200 aspect-square cursor-pointer"
+                 onclick="openLightbox(this)">
+                <img src="/media/thumb/{{$.Project.Slug}}/{{.Filename}}"
+                     alt="{{deref .Caption}}" loading="lazy"
+                     class="w-full h-full object-cover">
+                {{if .Tag}}
+                <span class="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold text-white uppercase
+                    {{if eq (deref .Tag) "before"}}bg-cyan-500{{end}}
+                    {{if eq (deref .Tag) "after"}}bg-green-500{{end}}
+                    {{if eq (deref .Tag) "issue"}}bg-red-500{{end}}
+                    {{if eq (deref .Tag) "progress"}}bg-duke-teal{{end}}
+                ">{{deref .Tag}}</span>
+                {{end}}
+                <div class="absolute bottom-0 inset-x-0 px-2 py-1.5 bg-gradient-to-t from-black/70 to-transparent text-white text-[11px] font-semibold hidden sm:block">
+                    {{.DisplayName}}
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
+    {{else}}
+    <div class="text-center py-12 text-gray-500">
+        <div class="text-5xl mb-2">📷</div>
+        <p class="text-base">No photos yet. Be the first!</p>
+    </div>
+    {{end}}
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox fixed inset-0 bg-black/95 z-[1000] flex-col" id="lightbox">
+    <div class="flex items-center px-4 py-3 text-white gap-3">
+        <button onclick="closeLightbox()" class="bg-transparent border-none text-white text-3xl cursor-pointer p-1">✕</button>
+        <div class="flex-1">
+            <div class="text-[15px] font-semibold" id="lb-caption"></div>
+            <div class="text-xs text-gray-400" id="lb-meta"></div>
+        </div>
+    </div>
+    <div class="flex-1 flex items-center justify-center p-2 overflow-hidden" onclick="closeLightbox()">
+        <img id="lb-img" src="" alt="" class="max-w-full max-h-full object-contain rounded">
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script src="/static/js/upload.js?v=4"></script>
+<script>
+    var PROJECT_ID = {{.Project.ID}};
+    var PROJECT_SLUG = "{{.Project.Slug}}";
+    var photos = {{.PhotosJSON}};
+    var currentPhoto = 0;
+
+    // ─── Worker memory ──────────────────────────────────
+    var WORKER_KEY = 'dukecam_worker';
+
+    function loadSavedWorker() {
+        try {
+            var saved = localStorage.getItem(WORKER_KEY);
+            if (saved) {
+                var data = JSON.parse(saved);
+                var sel = document.getElementById('worker-select');
+                if (data.id === 'other') {
+                    sel.value = 'other';
+                    workerChanged();
+                    document.getElementById('other-name').value = data.name;
+                } else {
+                    sel.value = data.id;
+                    if (sel.value !== String(data.id)) sel.value = '';
+                }
+            }
+        } catch (e) {}
+    }
+
+    function saveWorker() {
+        try {
+            var sel = document.getElementById('worker-select');
+            if (sel.value === 'other') {
+                var name = document.getElementById('other-name').value.trim();
+                if (name) localStorage.setItem(WORKER_KEY, JSON.stringify({ id: 'other', name: name }));
+            } else if (sel.value) {
+                localStorage.setItem(WORKER_KEY, JSON.stringify({
+                    id: sel.value, name: sel.options[sel.selectedIndex].text
+                }));
+            }
+        } catch (e) {}
+    }
+
+    function workerChanged() {
+        var sel = document.getElementById('worker-select');
+        var other = document.getElementById('other-name');
+        if (sel.value === 'other') {
+            other.classList.remove('hidden');
+            other.focus();
+        } else {
+            other.classList.add('hidden');
+        }
+        saveWorker();
+    }
+
+    function getWorkerInfo() {
+        var sel = document.getElementById('worker-select');
+        if (sel.value === 'other') {
+            var name = document.getElementById('other-name').value.trim();
+            return { workerId: null, workerName: name || null };
+        } else if (sel.value) {
+            return { workerId: parseInt(sel.value), workerName: null };
+        }
+        return { workerId: null, workerName: null };
+    }
+
+    // ─── Tags ───────────────────────────────────────────
+    var activeTag = null;
+
+    function toggleTag(btn) {
+        var tag = btn.dataset.tag;
+        if (activeTag === tag) {
+            btn.classList.remove('!border-current', '!bg-current', '!text-white');
+            activeTag = null;
+        } else {
+            document.querySelectorAll('.tag-btn').forEach(function(b) {
+                b.classList.remove('!border-current', '!bg-current', '!text-white');
+            });
+            btn.style.backgroundColor = '';
+            btn.style.color = '';
+            // Use inline style for active state since Tailwind can't do dynamic
+            var colors = { progress: '#006778', before: '#0891b2', after: '#16a34a', issue: '#dc2626' };
+            btn.style.backgroundColor = colors[tag];
+            btn.style.borderColor = colors[tag];
+            btn.style.color = 'white';
+            activeTag = tag;
+        }
+    }
+
+    // ─── File handling ──────────────────────────────────
+    var cameraInput = document.getElementById('camera-input');
+    var fileInput = document.getElementById('file-input');
+
+    if (cameraInput) {
+        cameraInput.addEventListener('change', function() {
+            if (this.files.length > 0) handleFiles(this.files);
+        });
+    }
+    if (fileInput) {
+        fileInput.addEventListener('change', function() {
+            if (this.files.length > 0) handleFiles(this.files);
+        });
+    }
+
+    // Camera return fallback (Android)
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible' && cameraInput) {
+            setTimeout(function() {
+                if (cameraInput.files && cameraInput.files.length > 0) {
+                    handleFiles(cameraInput.files);
+                }
+            }, 500);
+        }
+    });
+
+    function handleFiles(files) {
+        if (!files || files.length === 0) return;
+
+        var info = getWorkerInfo();
+        if (!info.workerId && !info.workerName) {
+            showStatus('💡 Tip: Select your name above so photos are tagged to you', 'hint');
+            setTimeout(hideStatus, 5000);
+        }
+        saveWorker();
+
+        var caption = document.getElementById('caption').value.trim();
+        enqueueFiles(files, PROJECT_ID, info.workerId, info.workerName, caption, activeTag);
+
+        setTimeout(function() {
+            document.getElementById('camera-input').value = '';
+            document.getElementById('file-input').value = '';
+        }, 100);
+    }
+
+    function showStatus(msg, type) {
+        var el = document.getElementById('upload-status');
+        el.textContent = msg;
+        el.className = 'px-4 py-2.5 rounded-lg text-sm text-center ' +
+            (type === 'hint' ? 'bg-yellow-50 text-yellow-800 border border-yellow-300' :
+             type === 'error' ? 'bg-red-50 text-red-800 border border-red-300' :
+             'bg-green-50 text-green-800 border border-green-300');
+        el.style.display = 'block';
+    }
+    function hideStatus() {
+        document.getElementById('upload-status').style.display = 'none';
+    }
+
+    // ─── Drag & Drop ────────────────────────────────────
+    var dropArea = document.getElementById('drop-area');
+    ['dragenter', 'dragover'].forEach(function(evt) {
+        dropArea.addEventListener(evt, function(e) {
+            e.preventDefault();
+            dropArea.style.borderColor = '#006778';
+            dropArea.style.backgroundColor = 'rgba(0,103,120,0.05)';
+        });
+    });
+    ['dragleave', 'drop'].forEach(function(evt) {
+        dropArea.addEventListener(evt, function(e) {
+            e.preventDefault();
+            dropArea.style.borderColor = '';
+            dropArea.style.backgroundColor = '';
+        });
+    });
+    dropArea.addEventListener('drop', function(e) {
+        handleFiles(e.dataTransfer.files);
+    });
+
+    // ─── Lightbox ───────────────────────────────────────
+    function openLightbox(tile) {
+        // Find photo index from tile position
+        var tiles = document.querySelectorAll('.photo-tile');
+        var idx = Array.from(tiles).indexOf(tile);
+        if (idx < 0 || idx >= photos.length) return;
+
+        currentPhoto = idx;
+        var p = photos[idx];
+        document.getElementById('lb-img').src = p.url;
+        document.getElementById('lb-caption').textContent = p.caption || '';
+        document.getElementById('lb-meta').textContent = p.worker + ' • ' + p.date + (p.tag ? ' • ' + p.tag : '');
+        document.getElementById('lightbox').classList.add('show');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeLightbox() {
+        document.getElementById('lightbox').classList.remove('show');
+        document.body.style.overflow = '';
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeLightbox();
+    });
+
+    // ─── Init ───────────────────────────────────────────
+    loadSavedWorker();
+</script>
+{{end}}

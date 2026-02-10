@@ -1,0 +1,34 @@
+{{define "project-item"}}
+<li id="project-{{.ID}}" class="flex items-center gap-3 py-3 {{if not .Active}}opacity-50{{end}}">
+    <span class="flex-1 font-semibold text-duke-dark">{{.Name}}</span>
+    <span class="text-sm text-gray-500">{{deref .Address}}</span>
+    <span class="text-sm text-gray-400">{{.PhotoCount}} photos</span>
+    <div class="flex gap-1.5">
+        <button hx-post="/api/admin/project/{{.ID}}/toggle"
+                hx-target="#project-{{.ID}}" hx-swap="outerHTML"
+                class="px-3 py-1 text-xs font-semibold rounded-md bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors cursor-pointer">
+            {{if .Active}}Deactivate{{else}}Activate{{end}}
+        </button>
+        <a href="/api/admin/project/{{.ID}}/qr" download
+           class="px-3 py-1 text-xs font-semibold rounded-md bg-duke-teal text-white hover:bg-duke-dark transition-colors no-underline">
+            QR
+        </a>
+        <a href="/p/{{.Slug}}" target="_blank"
+           class="px-3 py-1 text-xs font-semibold rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors no-underline">
+            View
+        </a>
+    </div>
+</li>
+{{end}}
+
+{{define "worker-item"}}
+<li id="worker-{{.ID}}" class="flex items-center gap-3 py-3 {{if not .Active}}opacity-50{{end}}">
+    <span class="flex-1 font-semibold text-duke-dark">{{.Name}}</span>
+    <span class="text-xs text-gray-400 font-mono">{{.ShortCode}}</span>
+    <button hx-post="/api/admin/worker/{{.ID}}/toggle"
+            hx-target="#worker-{{.ID}}" hx-swap="outerHTML"
+            class="px-3 py-1 text-xs font-semibold rounded-md bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors cursor-pointer">
+        {{if .Active}}Deactivate{{else}}Activate{{end}}
+    </button>
+</li>
+{{end}}

@@ -1,0 +1,56 @@
+{{define "title"}}Admin — DukeCam{{end}}
+{{define "header_right"}}<a href="/" class="text-duke-light hover:text-white transition-colors">← Back</a>{{end}}
+
+{{define "content"}}
+<div class="max-w-4xl mx-auto p-4 space-y-6">
+
+    <!-- Projects -->
+    <div class="bg-white rounded-xl p-5 shadow-sm">
+        <h2 class="text-lg font-bold text-duke-dark mb-4">📁 Projects</h2>
+
+        <form hx-post="/api/admin/project" hx-target="#project-list" hx-swap="beforeend"
+              hx-on::after-request="if(event.detail.successful) this.reset()"
+              class="flex flex-wrap gap-2 mb-4">
+            <input name="name" placeholder="Project name" required
+                   class="flex-1 min-w-[150px] px-3 py-2.5 border-2 border-gray-200 rounded-lg text-base focus:border-duke-teal focus:outline-none">
+            <input name="slug" placeholder="slug" required
+                   class="w-32 px-3 py-2.5 border-2 border-gray-200 rounded-lg text-base focus:border-duke-teal focus:outline-none">
+            <input name="address" placeholder="Address (optional)"
+                   class="flex-1 min-w-[150px] px-3 py-2.5 border-2 border-gray-200 rounded-lg text-base focus:border-duke-teal focus:outline-none">
+            <button type="submit"
+                    class="px-5 py-2.5 bg-duke-teal text-white rounded-lg font-semibold hover:bg-duke-dark transition-colors">
+                Add Project
+            </button>
+        </form>
+
+        <ul id="project-list" class="divide-y divide-gray-100">
+            {{range .Projects}}
+            {{template "project-item" .}}
+            {{end}}
+        </ul>
+    </div>
+
+    <!-- Workers -->
+    <div class="bg-white rounded-xl p-5 shadow-sm">
+        <h2 class="text-lg font-bold text-duke-dark mb-4">👷 Workers</h2>
+
+        <form hx-post="/api/admin/worker" hx-target="#worker-list" hx-swap="beforeend"
+              hx-on::after-request="if(event.detail.successful) this.reset()"
+              class="flex gap-2 mb-4">
+            <input name="name" placeholder="Worker name" required
+                   class="flex-1 px-3 py-2.5 border-2 border-gray-200 rounded-lg text-base focus:border-duke-teal focus:outline-none">
+            <button type="submit"
+                    class="px-5 py-2.5 bg-duke-teal text-white rounded-lg font-semibold hover:bg-duke-dark transition-colors">
+                Add Worker
+            </button>
+        </form>
+
+        <ul id="worker-list" class="divide-y divide-gray-100">
+            {{range .Workers}}
+            {{template "worker-item" .}}
+            {{end}}
+        </ul>
+    </div>
+
+</div>
+{{end}}

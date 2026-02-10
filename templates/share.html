@@ -1,0 +1,105 @@
+{{define "title"}}{{.Project.Name}} — DukeCam{{end}}
+
+{{define "head"}}
+<!-- OG Meta Tags for sharing -->
+<meta property="og:title" content="{{.Project.Name}} — DukeCam">
+<meta property="og:description" content="{{.PhotoCount}} construction photos{{if .Project.Address}} at {{deref .Project.Address}}{{end}}">
+{{if .FirstThumbURL}}<meta property="og:image" content="{{.FirstThumbURL}}">{{end}}
+<meta property="og:url" content="{{.BaseURL}}/share/{{.Project.Slug}}">
+<meta property="og:type" content="website">
+{{end}}
+
+{{define "header_right"}}{{.Project.Name}}{{end}}
+
+{{define "content"}}
+<!-- Project Header -->
+<div class="bg-white px-5 py-4 border-b border-gray-200">
+    <h1 class="text-xl font-bold text-duke-dark">{{.Project.Name}}</h1>
+    {{if .Project.Address}}<p class="text-sm text-gray-500 mt-0.5">{{deref .Project.Address}}</p>{{end}}
+    <p class="text-sm text-gray-400 mt-1">{{.PhotoCount}} photos</p>
+</div>
+
+<!-- Photo Gallery -->
+<div class="px-4 pb-6">
+    {{if .DayGroups}}
+    {{range $dg := .DayGroups}}
+    <div class="mb-6">
+        <div class="flex items-center justify-between py-3 border-b-2 border-duke-teal mb-3">
+            <span class="text-base font-bold text-duke-dark">{{$dg.Label}}</span>
+            <span class="text-sm text-gray-500 font-semibold">{{len $dg.Photos}} photos</span>
+        </div>
+        <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
+            {{range $dg.Photos}}
+            <div class="photo-tile relative rounded-lg overflow-hidden bg-gray-200 aspect-square cursor-pointer"
+                 onclick="openLightbox(this)">
+                <img src="/media/thumb/{{$.Project.Slug}}/{{.Filename}}"
+                     alt="{{deref .Caption}}" loading="lazy"
+                     class="w-full h-full object-cover">
+                {{if .Tag}}
+                <span class="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold text-white uppercase
+                    {{if eq (deref .Tag) "before"}}bg-cyan-500{{end}}
+                    {{if eq (deref .Tag) "after"}}bg-green-500{{end}}
+                    {{if eq (deref .Tag) "issue"}}bg-red-500{{end}}
+                    {{if eq (deref .Tag) "progress"}}bg-duke-teal{{end}}
+                ">{{deref .Tag}}</span>
+                {{end}}
+                <div class="absolute bottom-0 inset-x-0 px-2 py-1.5 bg-gradient-to-t from-black/70 to-transparent text-white text-[11px] font-semibold hidden sm:block">
+                    {{.DisplayName}}
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
+    {{else}}
+    <div class="text-center py-12 text-gray-500">
+        <div class="text-5xl mb-2">📷</div>
+        <p class="text-base">No photos in this project yet.</p>
+    </div>
+    {{end}}
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox fixed inset-0 bg-black/95 z-[1000] flex-col" id="lightbox">
+    <div class="flex items-center px-4 py-3 text-white gap-3">
+        <button onclick="closeLightbox()" class="bg-transparent border-none text-white text-3xl cursor-pointer p-1">✕</button>
+        <div class="flex-1">
+            <div class="text-[15px] font-semibold" id="lb-caption"></div>
+            <div class="text-xs text-gray-400" id="lb-meta"></div>
+        </div>
+    </div>
+    <div class="flex-1 flex items-center justify-center p-2 overflow-hidden" onclick="closeLightbox()">
+        <img id="lb-img" src="" alt="" class="max-w-full max-h-full object-contain rounded">
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+    var photos = {{.PhotosJSON}};
+    var currentPhoto = 0;
+
+    function openLightbox(tile) {
+        var tiles = document.querySelectorAll('.photo-tile');
+        var idx = Array.from(tiles).indexOf(tile);
+        if (idx < 0 || idx >= photos.length) return;
+
+        currentPhoto = idx;
+        var p = photos[idx];
+        document.getElementById('lb-img').src = p.url;
+        document.getElementById('lb-caption').textContent = p.caption || '';
+        document.getElementById('lb-meta').textContent = p.worker + ' • ' + p.date + (p.tag ? ' • ' + p.tag : '');
+        document.getElementById('lightbox').classList.add('show');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeLightbox() {
+        document.getElementById('lightbox').classList.remove('show');
+        document.body.style.overflow = '';
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeLightbox();
+    });
+</script>
+{{end}}

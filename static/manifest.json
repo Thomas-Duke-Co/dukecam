@@ -1,0 +1,16 @@
+{
+    "name": "DukeCam",
+    "short_name": "DukeCam",
+    "description": "Construction photo documentation for Thomas Duke Company",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#023645",
+    "theme_color": "#023645",
+    "icons": [
+        {
+            "src": "/static/img/tduke-favicon.jpg",
+            "sizes": "192x192",
+            "type": "image/jpeg"
+        }
+    ]
+}

@@ -1,0 +1,27 @@
+services:
+  dukecam:
+    build: .
+    container_name: dukecam
+    restart: unless-stopped
+    ports:
+      - "4010:4010"
+    environment:
+      - DATABASE_URL=postgres://trevor@postgres:5432/dukecam
+      - STORAGE_PATH=/data/photos
+      - THUMB_PATH=/data/thumbs
+      - BASE_URL=https://dukecam.thomasduke.io
+      - MAX_UPLOAD_MB=50
+      - PORT=4010
+    volumes:
+      - photo-data:/data
+    networks:
+      - postgres-net
+
+volumes:
+  photo-data:
+    driver: local
+
+networks:
+  postgres-net:
+    external: true
+    name: postgres_default
