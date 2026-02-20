@@ -421,6 +421,31 @@ func (db *DB) InsertPhoto(ctx context.Context, p *Photo) error {
 	).Scan(&p.ID, &p.UploadedAt)
 }
 
+func (db *DB) GetPhotoByID(ctx context.Context, id int) (*Photo, error) {
+	var p Photo
+	err := db.pool.QueryRow(ctx, `
+		SELECT id, project_id, worker_id, worker_name_override, filename,
+		       original_filename, caption, tag, lat, lng, taken_at, uploaded_at,
+		       file_size, width, height, storage_path, thumb_path, upload_batch
+		FROM photos WHERE id = $1
+	`, id).Scan(
+		&p.ID, &p.ProjectID, &p.WorkerID, &p.WorkerNameOverride, &p.Filename,
+		&p.OriginalFilename, &p.Caption, &p.Tag, &p.Lat, &p.Lng, &p.TakenAt, &p.UploadedAt,
+		&p.FileSize, &p.Width, &p.Height, &p.StoragePath, &p.ThumbPath, &p.UploadBatch,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+func (db *DB) UpdatePhotoAnnotations(ctx context.Context, photoID int, caption, tag *string) error {
+	_, err := db.pool.Exec(ctx, `
+		UPDATE photos SET caption = $2, tag = $3 WHERE id = $1
+	`, photoID, caption, tag)
+	return err
+}
+
 // ─── Admin Queries ───────────────────────────────────────────────
 
 func (db *DB) ListAllProjects(ctx context.Context) ([]AdminProject, error) {

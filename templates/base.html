@@ -42,6 +42,11 @@
         /* Photo tile hover */
         .photo-tile:active img { transform: scale(1.05); }
         .photo-tile img { transition: transform 0.2s; }
+        /* Camera overlay */
+        @keyframes camera-flash { 0% { opacity: 0.8; } 100% { opacity: 0; } }
+        .camera-flash { animation: camera-flash 0.25s ease-out forwards; }
+        .thumb-strip::-webkit-scrollbar { display: none; }
+        .thumb-strip { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
     {{template "head" .}}
 </head>

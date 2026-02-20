@@ -21,6 +21,7 @@ type DayGroup struct {
 
 // LightboxPhoto is the JSON structure embedded in the page for the JS lightbox.
 type LightboxPhoto struct {
+	ID      int    `json:"id"`
 	URL     string `json:"url"`
 	Caption string `json:"caption"`
 	Worker  string `json:"worker"`
@@ -62,6 +63,7 @@ func makeLightboxData(photos []PhotoWithWorker, slug string) template.JS {
 			tag = *p.Tag
 		}
 		lb = append(lb, LightboxPhoto{
+			ID:      p.ID,
 			URL:     "/media/photo/" + slug + "/" + p.Filename,
 			Caption: caption,
 			Worker:  p.DisplayName(),

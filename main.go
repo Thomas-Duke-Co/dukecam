@@ -68,6 +68,7 @@ func (a *App) registerRoutes(e *echo.Echo) {
 	// API — upload returns JSON (for JS engine), admin returns HTML fragments (HTMX)
 	e.POST("/api/upload", a.UploadPhoto)
 	e.GET("/api/photos/:slug", a.GetPhotos)
+	e.PATCH("/api/photo/:id", a.UpdatePhoto)
 
 	// Admin API (HTMX)
 	e.POST("/api/admin/project", a.CreateProject)

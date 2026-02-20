@@ -352,6 +352,45 @@ func (a *App) ProjectQR(c echo.Context) error {
 	return c.Blob(http.StatusOK, "image/png", png)
 }
 
+// ─── Update Photo Annotations (JSON) ─────────────────────────────
+
+func (a *App) UpdatePhoto(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid photo id"})
+	}
+
+	var body struct {
+		Caption *string `json:"caption"`
+		Tag     *string `json:"tag"`
+	}
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+	}
+
+	// Validate tag enum
+	if body.Tag != nil && *body.Tag != "" {
+		switch *body.Tag {
+		case "progress", "before", "after", "issue":
+		default:
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid tag value"})
+		}
+	}
+
+	// Validate photo exists
+	if _, err := a.db.GetPhotoByID(ctx, id); err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "photo not found"})
+	}
+
+	if err := a.db.UpdatePhotoAnnotations(ctx, id, body.Caption, body.Tag); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "update failed"})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────
 
 func renderFragment(c echo.Context, name string, data interface{}) error {
