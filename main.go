@@ -69,6 +69,7 @@ func (a *App) registerRoutes(e *echo.Echo) {
 	e.POST("/api/upload", a.UploadPhoto)
 	e.GET("/api/photos/:slug", a.GetPhotos)
 	e.PATCH("/api/photo/:id", a.UpdatePhoto)
+	e.POST("/api/photo/:id/rotate", a.RotatePhoto)
 
 	// Admin API (HTMX)
 	e.POST("/api/admin/project", a.CreateProject)

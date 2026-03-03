@@ -124,6 +124,52 @@ func FindFile(basePath, slug, filename string) (string, error) {
 	return matches[0], nil
 }
 
+// RotateFile reads an image from disk, rotates it, saves it back, and regenerates the thumbnail.
+// direction: "cw" for 90° clockwise, "ccw" for 90° counter-clockwise, "180" for 180°.
+func RotateFile(photoPath, thumbPath, direction string) (int, int, error) {
+	img, err := imaging.Open(photoPath)
+	if err != nil {
+		return 0, 0, fmt.Errorf("open image: %w", err)
+	}
+
+	var rotated *image.NRGBA
+	switch direction {
+	case "cw":
+		rotated = imaging.Rotate270(img) // 270° CCW = 90° CW
+	case "ccw":
+		rotated = imaging.Rotate90(img) // 90° CCW
+	case "180":
+		rotated = imaging.Rotate180(img)
+	default:
+		return 0, 0, fmt.Errorf("invalid direction: %s", direction)
+	}
+
+	ext := strings.ToLower(filepath.Ext(photoPath))
+	quality := 85
+	if ext == ".png" {
+		quality = 0
+	}
+
+	if err := SaveImage(rotated, photoPath, quality); err != nil {
+		return 0, 0, fmt.Errorf("save rotated: %w", err)
+	}
+
+	// Regenerate thumbnail
+	if thumbPath != "" {
+		thumb := imaging.Fit(rotated, 400, 400, imaging.Lanczos)
+		thumbQuality := 80
+		if ext == ".png" {
+			thumbQuality = 0
+		}
+		if err := SaveImage(thumb, thumbPath, thumbQuality); err != nil {
+			// Non-fatal
+			fmt.Printf("regenerate thumb error: %v\n", err)
+		}
+	}
+
+	return rotated.Bounds().Dx(), rotated.Bounds().Dy(), nil
+}
+
 // EncodeToBytes encodes an image to a byte slice (for QR generation etc).
 func EncodeToBytes(img image.Image, format string) ([]byte, error) {
 	var buf bytes.Buffer

@@ -439,6 +439,13 @@ func (db *DB) GetPhotoByID(ctx context.Context, id int) (*Photo, error) {
 	return &p, nil
 }
 
+func (db *DB) UpdatePhotoDimensions(ctx context.Context, photoID, width, height int) error {
+	_, err := db.pool.Exec(ctx, `
+		UPDATE photos SET width = $2, height = $3 WHERE id = $1
+	`, photoID, width, height)
+	return err
+}
+
 func (db *DB) UpdatePhotoAnnotations(ctx context.Context, photoID int, caption, tag *string) error {
 	_, err := db.pool.Exec(ctx, `
 		UPDATE photos SET caption = $2, tag = $3 WHERE id = $1

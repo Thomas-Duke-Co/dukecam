@@ -391,6 +391,52 @@ func (a *App) UpdatePhoto(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// ─── Rotate Photo ────────────────────────────────────────────────
+
+func (a *App) RotatePhoto(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid photo id"})
+	}
+
+	var body struct {
+		Direction string `json:"direction"` // "cw", "ccw", or "180"
+	}
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+	}
+	if body.Direction == "" {
+		body.Direction = "cw"
+	}
+	if body.Direction != "cw" && body.Direction != "ccw" && body.Direction != "180" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "direction must be cw, ccw, or 180"})
+	}
+
+	photo, err := a.db.GetPhotoByID(ctx, id)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "photo not found"})
+	}
+
+	thumbPath := ""
+	if photo.ThumbPath != nil {
+		thumbPath = *photo.ThumbPath
+	}
+
+	newW, newH, err := RotateFile(photo.StoragePath, thumbPath, body.Direction)
+	if err != nil {
+		log.Printf("rotate error: id=%d err=%v", id, err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "rotation failed"})
+	}
+
+	// Update dimensions in DB
+	a.db.UpdatePhotoDimensions(ctx, id, newW, newH)
+
+	log.Printf("rotated photo: id=%d direction=%s new=%dx%d", id, body.Direction, newW, newH)
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────
 
 func renderFragment(c echo.Context, name string, data interface{}) error {

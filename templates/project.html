@@ -1,5 +1,5 @@
 {{define "title"}}{{.Project.Name}} — DukeCam{{end}}
-{{define "header_right"}}{{.Project.Name}}{{end}}
+{{define "header_right"}}<span class="text-sm font-semibold text-white truncate max-w-[180px] sm:max-w-none">{{.Project.Name}}</span>{{end}}
 
 {{define "content"}}
 <!-- Upload Section -->
@@ -91,9 +91,11 @@
                     {{if eq (deref .Tag) "progress"}}bg-duke-teal{{end}}
                 ">{{deref .Tag}}</span>
                 {{end}}
-                <div class="absolute bottom-0 inset-x-0 px-2 py-1.5 bg-gradient-to-t from-black/70 to-transparent text-white text-[11px] font-semibold hidden sm:block">
-                    {{.DisplayName}}
+                {{if ne .DisplayName "Unknown"}}
+                <div class="absolute bottom-1.5 left-1.5 w-7 h-7 rounded-full bg-duke-teal text-white text-[11px] font-bold flex items-center justify-center shadow ring-1 ring-white/60" title="{{.DisplayName}}">
+                    {{initials .DisplayName}}
                 </div>
+                {{end}}
             </div>
             {{end}}
         </div>
@@ -143,6 +145,8 @@
             <div class="text-[15px] font-semibold" id="lb-caption"></div>
             <div class="text-xs text-gray-400" id="lb-meta"></div>
         </div>
+        <button onclick="rotateCurrentPhoto('ccw')" title="Rotate left" class="px-2.5 py-1.5 bg-white/20 rounded-lg text-sm hover:bg-white/30 transition-colors">↺</button>
+        <button onclick="rotateCurrentPhoto('cw')" title="Rotate right" class="px-2.5 py-1.5 bg-white/20 rounded-lg text-sm hover:bg-white/30 transition-colors">↻</button>
         <button onclick="toggleLightboxEdit()" id="lb-edit-btn" class="px-3 py-1.5 bg-white/20 rounded-lg text-sm font-semibold hover:bg-white/30 transition-colors">Edit</button>
     </div>
     <!-- Edit Panel -->
@@ -160,8 +164,8 @@
             <button onclick="saveLightboxEdit()" class="w-full py-2 bg-duke-teal text-white text-sm font-bold rounded-lg active:bg-duke-dark transition-colors">Save</button>
         </div>
     </div>
-    <div class="flex-1 flex items-center justify-center p-2 overflow-hidden" onclick="closeLightbox()">
-        <img id="lb-img" src="" alt="" class="max-w-full max-h-full object-contain rounded">
+    <div id="lb-body" class="flex-1 flex items-center justify-center p-2 overflow-hidden" onclick="if(event.target===this)closeLightbox()">
+        <img id="lb-img" src="" alt="" class="max-w-full max-h-full object-contain rounded" onclick="event.stopPropagation()">
     </div>
 </div>
 {{end}}
@@ -334,18 +338,21 @@
     });
 
     // ─── Lightbox ───────────────────────────────────────
-    function openLightbox(tile) {
-        // Find photo index from tile position
-        var tiles = document.querySelectorAll('.photo-tile');
-        var idx = Array.from(tiles).indexOf(tile);
+    function showPhoto(idx) {
         if (idx < 0 || idx >= photos.length) return;
-
         currentPhoto = idx;
         var p = photos[idx];
         document.getElementById('lb-img').src = p.url;
         document.getElementById('lb-caption').textContent = p.caption || '';
         document.getElementById('lb-meta').textContent = p.worker + ' • ' + p.date + (p.tag ? ' • ' + p.tag : '');
         document.getElementById('lb-edit-panel').classList.add('hidden');
+    }
+
+    function openLightbox(tile) {
+        var tiles = document.querySelectorAll('.photo-tile');
+        var idx = Array.from(tiles).indexOf(tile);
+        if (idx < 0 || idx >= photos.length) return;
+        showPhoto(idx);
         document.getElementById('lightbox').classList.add('show');
         document.body.style.overflow = 'hidden';
     }
@@ -356,8 +363,21 @@
         document.body.style.overflow = '';
     }
 
+    function isLightboxOpen() {
+        return document.getElementById('lightbox').classList.contains('show');
+    }
+
     document.addEventListener('keydown', function(e) {
+        if (!isLightboxOpen()) return;
         if (e.key === 'Escape') closeLightbox();
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (currentPhoto < photos.length - 1) showPhoto(currentPhoto + 1);
+        }
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (currentPhoto > 0) showPhoto(currentPhoto - 1);
+        }
     });
 
     // ─── Lightbox Edit ─────────────────────────────────
@@ -442,6 +462,42 @@
         });
     }
 
+    // ─── Rotate Photo ────────────────────────────────────
+    function rotateCurrentPhoto(direction) {
+        var p = photos[currentPhoto];
+        if (!p) return;
+
+        var img = document.getElementById('lb-img');
+        img.style.opacity = '0.5';
+
+        fetch('/api/photo/' + p.id + '/rotate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ direction: direction })
+        }).then(function(res) {
+            if (!res.ok) throw new Error('Rotate failed');
+            return res.json();
+        }).then(function() {
+            // Force reload the image by busting cache
+            var ts = Date.now();
+            img.src = p.url + '?v=' + ts;
+            img.style.opacity = '1';
+
+            // Also bust cache on the thumbnail in the gallery
+            var tiles = document.querySelectorAll('.photo-tile');
+            if (tiles[currentPhoto]) {
+                var thumbImg = tiles[currentPhoto].querySelector('img');
+                if (thumbImg) {
+                    thumbImg.src = thumbImg.src.split('?')[0] + '?v=' + ts;
+                }
+            }
+            showToast('Photo rotated', 'success');
+        }).catch(function(err) {
+            img.style.opacity = '1';
+            showToast('Rotate failed: ' + err.message, 'error');
+        });
+    }
+
     // ─── Rapid-Shoot Camera ────────────────────────────
     var cameraStream = null;
     var shotCount = 0;
@@ -508,9 +564,38 @@
         var canvas = document.getElementById('camera-canvas');
         if (!video.videoWidth) return;
 
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        var ctx = canvas.getContext('2d');
+        var vw = video.videoWidth;
+        var vh = video.videoHeight;
+
+        // Detect orientation mismatch: if the device is in portrait but the
+        // video stream is landscape (or vice versa), the browser is applying
+        // display rotation that canvas.drawImage won't capture. We need to
+        // manually rotate the canvas to match what the user sees.
+        var angle = screen.orientation ? screen.orientation.angle : (window.orientation || 0);
+        var isDevicePortrait = (angle % 180 === 0);
+        var isVideoLandscape = (vw > vh);
+        var needsRotation = isDevicePortrait && isVideoLandscape;
+
+        var ctx;
+        if (needsRotation) {
+            // Swap canvas dimensions for portrait output
+            canvas.width = vh;
+            canvas.height = vw;
+            ctx = canvas.getContext('2d');
+            if (angle === 0) {
+                // Standard portrait: rotate 90° CW
+                ctx.translate(canvas.width, 0);
+                ctx.rotate(Math.PI / 2);
+            } else {
+                // Upside-down portrait (180°): rotate 90° CCW
+                ctx.translate(0, canvas.height);
+                ctx.rotate(-Math.PI / 2);
+            }
+        } else {
+            canvas.width = vw;
+            canvas.height = vh;
+            ctx = canvas.getContext('2d');
+        }
         ctx.drawImage(video, 0, 0);
 
         // Flash effect
@@ -550,6 +635,24 @@
         label.className = 'block w-full py-3 bg-gray-200 text-gray-600 text-center text-sm font-semibold rounded-xl cursor-pointer active:bg-gray-300 transition-colors mb-3';
         label.textContent = '📷 Single Photo (Fallback)';
     }
+
+    // ─── Lightbox Swipe (mobile) ────────────────────────
+    (function() {
+        var body = document.getElementById('lb-body');
+        var startX = 0;
+        var startY = 0;
+        body.addEventListener('touchstart', function(e) {
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+        }, { passive: true });
+        body.addEventListener('touchend', function(e) {
+            var dx = e.changedTouches[0].clientX - startX;
+            var dy = e.changedTouches[0].clientY - startY;
+            if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) return;
+            if (dx < 0 && currentPhoto < photos.length - 1) showPhoto(currentPhoto + 1);
+            if (dx > 0 && currentPhoto > 0) showPhoto(currentPhoto - 1);
+        }, { passive: true });
+    })();
 
     // ─── Init ───────────────────────────────────────────
     loadSavedWorker();
