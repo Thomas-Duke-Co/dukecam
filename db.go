@@ -305,6 +305,18 @@ func (db *DB) ListActiveWorkers(ctx context.Context) ([]Worker, error) {
 	return workers, nil
 }
 
+func (db *DB) FindWorkerByName(ctx context.Context, name string) (*Worker, error) {
+	var w Worker
+	err := db.pool.QueryRow(ctx, `
+		SELECT id, name, short_code, active, created_at
+		FROM workers WHERE LOWER(name) = LOWER($1) LIMIT 1
+	`, name).Scan(&w.ID, &w.Name, &w.ShortCode, &w.Active, &w.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &w, nil
+}
+
 func (db *DB) CreateWorker(ctx context.Context, name, shortCode string) (*Worker, error) {
 	var w Worker
 	err := db.pool.QueryRow(ctx, `

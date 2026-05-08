@@ -1,0 +1,367 @@
+{{define "inspection-template-list"}}
+<ul id="template-list" class="divide-y divide-gray-100">
+    {{if .Templates}}
+    {{range .Templates}}
+    {{template "inspection-template-item" .}}
+    {{end}}
+    {{else}}
+    <li class="py-8 text-center text-gray-400">
+        <p class="text-lg">No templates yet</p>
+        <p class="text-sm mt-1">Create your first inspection template above</p>
+    </li>
+    {{end}}
+</ul>
+{{end}}
+
+{{define "inspection-template-item"}}
+<li id="template-{{.ID}}" class="flex flex-col sm:flex-row sm:items-center gap-2 py-3 {{if not .Active}}opacity-50{{end}}">
+    <div class="flex-1 min-w-0">
+        <a href="/admin/inspections/{{.ID}}" class="font-semibold text-duke-dark hover:text-duke-teal transition-colors no-underline">
+            {{.Name}}
+        </a>
+        {{if .Description}}<p class="text-sm text-gray-500 truncate">{{deref .Description}}</p>{{end}}
+    </div>
+    <div class="flex items-center gap-2 text-sm text-gray-400 shrink-0">
+        <span>{{.CategoryCount}} categories</span>
+        <span class="text-gray-300">&middot;</span>
+        <span>{{.ItemCount}} items</span>
+    </div>
+    <div class="flex gap-1.5 shrink-0 flex-wrap">
+        <button hx-post="/api/admin/inspection-template/{{.ID}}/toggle"
+                hx-target="#template-{{.ID}}" hx-swap="outerHTML"
+                class="px-3 py-1 text-xs font-semibold rounded-md bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors cursor-pointer">
+            {{if .Active}}Deactivate{{else}}Activate{{end}}
+        </button>
+        <a href="/admin/inspections/{{.ID}}"
+           class="px-3 py-1 text-xs font-semibold rounded-md bg-duke-teal text-white hover:bg-duke-dark transition-colors no-underline">
+            Edit
+        </a>
+        <button hx-post="/api/admin/inspection-template/{{.ID}}/duplicate"
+                hx-target="#template-list" hx-swap="innerHTML"
+                class="px-3 py-1 text-xs font-semibold rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors cursor-pointer">
+            Copy
+        </button>
+        <button hx-delete="/api/admin/inspection-template/{{.ID}}"
+                hx-target="#template-{{.ID}}" hx-swap="outerHTML"
+                hx-confirm="Delete this template and all its categories/items?"
+                data-confirm="Delete this template and all its categories/items?"
+                class="px-3 py-1 text-xs font-semibold rounded-md bg-duke-red/10 text-duke-red hover:bg-duke-red/20 transition-colors cursor-pointer">
+            Delete
+        </button>
+    </div>
+</li>
+{{end}}
+
+{{define "inspection-template-header"}}
+<div class="bg-white rounded-xl p-5 shadow-sm">
+    <div id="header-display" class="flex flex-col sm:flex-row sm:items-start gap-3">
+        <div class="flex-1">
+            <div class="flex items-center gap-2 flex-wrap">
+                <h1 class="text-xl font-bold text-duke-dark">{{.Name}}</h1>
+                {{if .Active}}
+                <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-700">Active</span>
+                {{else}}
+                <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-200 text-gray-500">Inactive</span>
+                {{end}}
+            </div>
+            {{if .Description}}<p class="text-sm text-gray-500 mt-1">{{deref .Description}}</p>{{end}}
+            <p class="text-xs text-gray-400 mt-2">Created {{formatTime .CreatedAt}}</p>
+        </div>
+        <div class="flex gap-2 shrink-0">
+            <button onclick="document.getElementById('header-display').classList.add('hidden'); document.getElementById('header-edit').classList.remove('hidden'); document.getElementById('header-edit').querySelector('input').focus();"
+                    class="px-4 py-2 text-sm font-semibold rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors cursor-pointer">
+                Edit Details
+            </button>
+            <button hx-post="/api/admin/inspection-template/{{.ID}}/toggle"
+                    hx-target="#template-header" hx-swap="innerHTML"
+                    class="px-4 py-2 text-sm font-semibold rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors cursor-pointer">
+                {{if .Active}}Deactivate{{else}}Activate{{end}}
+            </button>
+        </div>
+    </div>
+    <form id="header-edit" class="hidden space-y-3"
+          hx-put="/api/admin/inspection-template/{{.ID}}"
+          hx-target="#template-header" hx-swap="innerHTML">
+        <div class="flex flex-wrap gap-2">
+            <input name="name" value="{{.Name}}" required
+                   class="flex-1 min-w-[200px] px-3 py-2.5 border-2 border-gray-200 rounded-lg text-base focus:border-duke-teal focus:outline-none font-semibold">
+            <input name="description" value="{{deref .Description}}" placeholder="Description (optional)"
+                   class="flex-1 min-w-[150px] px-3 py-2.5 border-2 border-gray-200 rounded-lg text-base focus:border-duke-teal focus:outline-none">
+        </div>
+        <div class="flex gap-2">
+            <button type="submit"
+                    class="px-4 py-2 text-sm font-semibold rounded-lg bg-duke-teal text-white hover:bg-duke-dark transition-colors">
+                Save Changes
+            </button>
+            <button type="button"
+                    onclick="document.getElementById('header-edit').classList.add('hidden'); document.getElementById('header-display').classList.remove('hidden');"
+                    class="px-4 py-2 text-sm font-semibold rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors">
+                Cancel
+            </button>
+        </div>
+    </form>
+</div>
+{{end}}
+
+{{define "inspection-category-item"}}
+<div id="category-{{.ID}}" class="bg-white rounded-xl shadow-sm overflow-hidden">
+    <!-- Category Header -->
+    <div class="px-4 py-3 bg-gray-50 border-b border-gray-100">
+        <!-- Display Mode -->
+        <div id="cat-display-{{.ID}}" class="flex items-center gap-2">
+            <span class="text-gray-400 text-sm">&#x2807;</span>
+            <h3 class="flex-1 font-semibold text-duke-dark text-base">{{.Name}}</h3>
+            <span class="text-xs text-gray-400">{{len .Items}} items</span>
+            <button onclick="toggleCategoryEdit({{.ID}})"
+                    class="px-2 py-1 text-xs font-semibold rounded-md bg-gray-200 text-gray-600 hover:bg-gray-300 transition-colors cursor-pointer">
+                Rename
+            </button>
+            <button hx-delete="/api/admin/inspection-category/{{.ID}}"
+                    hx-target="#category-{{.ID}}" hx-swap="outerHTML"
+                    data-confirm="Delete this category and all its items?"
+                    class="px-2 py-1 text-xs font-semibold rounded-md bg-duke-red/10 text-duke-red hover:bg-duke-red/20 transition-colors cursor-pointer">
+                Delete
+            </button>
+        </div>
+        <!-- Edit Mode -->
+        <form id="cat-edit-{{.ID}}" class="hidden flex gap-2"
+              hx-put="/api/admin/inspection-category/{{.ID}}"
+              hx-target="#category-{{.ID}}" hx-swap="outerHTML">
+            <input name="name" value="{{.Name}}" required
+                   class="flex-1 px-3 py-1.5 border-2 border-gray-200 rounded-lg text-sm focus:border-duke-teal focus:outline-none font-semibold">
+            <button type="submit"
+                    class="px-3 py-1.5 text-xs font-semibold rounded-md bg-duke-teal text-white hover:bg-duke-dark transition-colors">
+                Save
+            </button>
+            <button type="button" onclick="toggleCategoryEdit({{.ID}})"
+                    class="px-3 py-1.5 text-xs font-semibold rounded-md bg-gray-200 text-gray-600 hover:bg-gray-300 transition-colors">
+                Cancel
+            </button>
+        </form>
+    </div>
+
+    <!-- Items List -->
+    <div class="divide-y divide-gray-50">
+        <ul id="item-list-{{.ID}}" class="divide-y divide-gray-50">
+            {{range .Items}}
+            {{template "inspection-item-row" .}}
+            {{end}}
+        </ul>
+
+        <!-- Add Item Form -->
+        <div class="px-4 py-3">
+            <form hx-post="/api/admin/inspection-category/{{.ID}}/item"
+                  hx-target="#item-list-{{.ID}}" hx-swap="beforeend"
+                  hx-on::after-request="if(event.detail.successful) { this.reset(); this.querySelector('input[name=label]').focus(); }"
+                  class="flex flex-wrap gap-2 items-center">
+                <input name="label" placeholder="Checklist item (e.g., Smoke detector functional)..." required
+                       class="flex-1 min-w-[150px] px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:border-duke-teal focus:outline-none">
+                <input name="description" placeholder="Notes (optional)"
+                       class="w-40 px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:border-duke-teal focus:outline-none hidden sm:block">
+                <label class="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none">
+                    <input type="checkbox" name="require_photo" class="w-4 h-4 rounded border-gray-300 text-duke-teal focus:ring-duke-teal">
+                    <span class="flex items-center gap-1">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>
+                        Photo
+                    </span>
+                </label>
+                <button type="submit"
+                        class="px-3 py-2 text-xs font-semibold rounded-lg bg-duke-teal text-white hover:bg-duke-dark transition-colors whitespace-nowrap">
+                    + Add Item
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{/* ─── Inspector Selection Component ─────────────────────────────── */}}
+{{/* Reusable inspector picker: search input + HTMX-powered dropdown.
+     Stores selected inspector_id + inspector_name in hidden inputs.
+     Use inside any form that needs an inspector field. */}}
+
+{{define "inspector-picker"}}
+<div id="inspector-picker" class="relative">
+    <!-- Selected Inspector Display (shown when inspector is chosen) -->
+    <div id="inspector-selected" class="hidden">
+        <div class="flex items-center gap-3 p-3 bg-duke-teal/5 border-2 border-duke-teal/30 rounded-xl">
+            <div id="inspector-avatar" class="w-10 h-10 rounded-full bg-duke-teal text-white flex items-center justify-center font-bold text-sm shrink-0">
+                --
+            </div>
+            <div class="flex-1 min-w-0">
+                <p id="inspector-display-name" class="font-semibold text-duke-dark text-sm truncate"></p>
+                <p id="inspector-display-detail" class="text-xs text-gray-500 truncate"></p>
+            </div>
+            <button type="button" onclick="clearInspector()"
+                    class="p-2 rounded-lg text-gray-400 hover:text-duke-red hover:bg-duke-red/10 transition-colors shrink-0"
+                    title="Change inspector">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Search Input (shown when no inspector selected) -->
+    <div id="inspector-search-wrapper">
+        <div class="relative">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+            </svg>
+            <input type="text" id="inspector-search-input"
+                   placeholder="Search inspector by name..."
+                   autocomplete="off"
+                   class="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl text-base
+                          focus:border-duke-teal focus:outline-none transition-colors
+                          placeholder:text-gray-400"
+                   hx-get="/api/inspections/inspectors/search"
+                   hx-trigger="input changed delay:300ms, focus"
+                   hx-target="#inspector-dropdown"
+                   hx-swap="innerHTML"
+                   hx-params="none"
+                   hx-vals='js:{"q": document.getElementById("inspector-search-input").value}'
+                   onfocus="document.getElementById('inspector-dropdown').classList.remove('hidden')"
+            >
+        </div>
+
+        <!-- Dropdown Results -->
+        <div id="inspector-dropdown"
+             class="hidden absolute z-30 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-64 overflow-y-auto">
+            <!-- HTMX will populate this with inspector-results fragment -->
+            <div class="p-3 text-sm text-gray-400 text-center">Type to search inspectors...</div>
+        </div>
+    </div>
+
+    <!-- Hidden form fields that store the selected inspector identity -->
+    <input type="hidden" name="inspector_id" id="inspector-id-input" value="">
+    <input type="hidden" name="inspector_name" id="inspector-name-input" value="">
+    <input type="hidden" name="inspector_email" id="inspector-email-input" value="">
+</div>
+
+<script>
+// Inspector picker logic — no framework needed, just vanilla JS
+function selectInspector(id, name, email, initials, group) {
+    // Store values in hidden fields
+    document.getElementById('inspector-id-input').value = id;
+    document.getElementById('inspector-name-input').value = name;
+    document.getElementById('inspector-email-input').value = email;
+
+    // Update display
+    document.getElementById('inspector-avatar').textContent = initials;
+    document.getElementById('inspector-display-name').textContent = name;
+    document.getElementById('inspector-display-detail').textContent = email + (group ? ' · ' + group : '');
+
+    // Toggle visibility: hide search, show selected
+    document.getElementById('inspector-search-wrapper').classList.add('hidden');
+    document.getElementById('inspector-selected').classList.remove('hidden');
+    document.getElementById('inspector-dropdown').classList.add('hidden');
+
+    // Dispatch change event so other components can react
+    document.getElementById('inspector-picker').dispatchEvent(
+        new CustomEvent('inspector-selected', { detail: { id, name, email }, bubbles: true })
+    );
+}
+
+function clearInspector() {
+    // Clear hidden fields
+    document.getElementById('inspector-id-input').value = '';
+    document.getElementById('inspector-name-input').value = '';
+    document.getElementById('inspector-email-input').value = '';
+
+    // Toggle visibility: show search, hide selected
+    document.getElementById('inspector-search-wrapper').classList.remove('hidden');
+    document.getElementById('inspector-selected').classList.add('hidden');
+
+    // Focus the search input for quick re-selection
+    setTimeout(function() {
+        document.getElementById('inspector-search-input').value = '';
+        document.getElementById('inspector-search-input').focus();
+    }, 50);
+
+    // Dispatch clear event
+    document.getElementById('inspector-picker').dispatchEvent(
+        new CustomEvent('inspector-cleared', { bubbles: true })
+    );
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    var picker = document.getElementById('inspector-picker');
+    if (picker && !picker.contains(e.target)) {
+        document.getElementById('inspector-dropdown').classList.add('hidden');
+    }
+});
+</script>
+{{end}}
+
+{{/* ─── Inspector Search Results (HTMX fragment) ─────────────────── */}}
+{{/* Rendered by SearchInspectors handler. Data is []FyxtUser. */}}
+
+{{define "inspector-results"}}
+{{range .}}
+<button type="button"
+        onclick="selectInspector('{{.ID}}', '{{.FullName}}', '{{.Email}}', '{{.Initials}}', '{{.GroupLabel}}')"
+        class="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-duke-teal/5 active:bg-duke-teal/10
+               transition-colors text-left border-b border-gray-50 last:border-0 cursor-pointer">
+    <div class="w-9 h-9 rounded-full bg-duke-teal/10 text-duke-teal flex items-center justify-center font-bold text-xs shrink-0">
+        {{.Initials}}
+    </div>
+    <div class="flex-1 min-w-0">
+        <p class="font-medium text-sm text-gray-800 truncate">{{.FullName}}</p>
+        <p class="text-xs text-gray-500 truncate">{{.Email}}{{if .GroupLabel}} · {{.GroupLabel}}{{end}}</p>
+    </div>
+    <svg class="w-4 h-4 text-gray-300 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+    </svg>
+</button>
+{{end}}
+{{end}}
+
+{{define "inspection-item-row"}}
+<li id="item-{{.ID}}" class="px-4 py-2.5 hover:bg-gray-50/50 transition-colors">
+    <!-- Display Mode -->
+    <div id="item-display-{{.ID}}" class="flex items-center gap-2">
+        <span class="text-gray-300 text-xs">&#x2807;</span>
+        <span class="flex-1 text-sm text-gray-800">{{.Label}}</span>
+        {{if .Description}}<span class="text-xs text-gray-400 hidden sm:inline truncate max-w-[150px]" title="{{deref .Description}}">{{deref .Description}}</span>{{end}}
+        {{if .RequirePhoto}}
+        <span class="px-1.5 py-0.5 text-xs rounded-full bg-green-50 text-green-600 font-medium flex items-center gap-0.5">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>
+            Photo
+        </span>
+        {{end}}
+        <button onclick="toggleItemEdit({{.ID}})"
+                class="px-2 py-1 text-xs rounded-md bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors cursor-pointer">
+            Edit
+        </button>
+        <button hx-delete="/api/admin/inspection-item/{{.ID}}"
+                hx-target="#item-{{.ID}}" hx-swap="outerHTML"
+                data-confirm="Delete this checklist item?"
+                class="px-2 py-1 text-xs rounded-md bg-duke-red/10 text-duke-red hover:bg-duke-red/20 transition-colors cursor-pointer">
+            &#x2715;
+        </button>
+    </div>
+    <!-- Edit Mode -->
+    <form id="item-edit-{{.ID}}" class="hidden flex flex-wrap gap-2 items-center"
+          hx-put="/api/admin/inspection-item/{{.ID}}"
+          hx-target="#item-{{.ID}}" hx-swap="outerHTML">
+        <input name="label" value="{{.Label}}" required
+               class="flex-1 min-w-[150px] px-2 py-1.5 border-2 border-gray-200 rounded-lg text-sm focus:border-duke-teal focus:outline-none">
+        <input name="description" value="{{deref .Description}}" placeholder="Notes (optional)"
+               class="w-32 px-2 py-1.5 border-2 border-gray-200 rounded-lg text-sm focus:border-duke-teal focus:outline-none">
+        <label class="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none">
+            <input type="checkbox" name="require_photo" {{if .RequirePhoto}}checked{{end}}
+                   class="w-4 h-4 rounded border-gray-300 text-duke-teal focus:ring-duke-teal">
+            Photo
+        </label>
+        <button type="submit"
+                class="px-2 py-1.5 text-xs font-semibold rounded-md bg-duke-teal text-white hover:bg-duke-dark transition-colors">
+            Save
+        </button>
+        <button type="button" onclick="toggleItemEdit({{.ID}})"
+                class="px-2 py-1.5 text-xs font-semibold rounded-md bg-gray-200 text-gray-600 hover:bg-gray-300 transition-colors">
+            Cancel
+        </button>
+    </form>
+</li>
+{{end}}

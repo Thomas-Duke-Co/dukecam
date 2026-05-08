@@ -35,28 +35,33 @@
     <textarea id="caption" rows="2" placeholder="Add a caption (optional)"
               class="w-full px-3 py-3 border-2 border-gray-200 rounded-lg text-base mb-4 resize-none focus:border-duke-teal focus:outline-none"></textarea>
 
-    <!-- Rapid Shoot Button (primary when getUserMedia available) -->
+    <!-- Gallery Picker — primary action (always visible, multi-select) -->
+    <label for="file-input"
+           class="flex items-center justify-center gap-3 w-full py-4 bg-duke-teal text-white text-center text-lg font-bold rounded-xl cursor-pointer active:bg-duke-dark transition-colors mb-3">
+        🖼️ Select Photos from Gallery
+        <span class="text-xs font-normal opacity-80">(tap to select multiple)</span>
+    </label>
+    <input type="file" id="file-input" accept="image/*" multiple class="hidden">
+
+    <!-- Rapid Shoot Button (in-app camera, shown when getUserMedia available) -->
     <button id="rapid-shoot-btn" onclick="openCamera()" style="display:none"
-            class="block w-full py-4 bg-duke-teal text-white text-center text-lg font-bold rounded-xl cursor-pointer active:bg-duke-dark transition-colors mb-3">
-        📷 Rapid Shoot
+            class="block w-full py-4 bg-white border-2 border-duke-teal text-duke-teal text-center text-base font-bold rounded-xl cursor-pointer active:bg-duke-teal/10 transition-colors mb-3">
+        📷 Rapid Shoot (Live Camera)
     </button>
 
-    <!-- Camera Button (fallback / secondary) -->
+    <!-- Camera Button (single shot fallback) -->
     <label for="camera-input" id="camera-label"
-           class="block w-full py-4 bg-duke-teal text-white text-center text-lg font-bold rounded-xl cursor-pointer active:bg-duke-dark transition-colors mb-3">
-        📷 Take Photo
+           class="block w-full py-3 bg-gray-100 text-gray-600 text-center text-sm font-semibold rounded-xl cursor-pointer active:bg-gray-200 transition-colors mb-3">
+        📷 Take Single Photo
     </label>
     <input type="file" id="camera-input" accept="image/*" capture="environment" class="hidden">
 
-    <!-- File Picker / Drop Zone -->
-    <label for="file-input" id="drop-area"
-           class="block border-3 border-dashed border-gray-300 rounded-xl py-8 px-4 text-center cursor-pointer transition-all hover:border-duke-teal active:border-duke-teal active:bg-duke-teal/5 mb-4"
-           style="border-width: 3px;">
-        <div class="text-5xl mb-2">📁</div>
-        <p class="text-base text-gray-500 font-semibold">Choose from gallery or drop files</p>
-        <div class="text-xs text-gray-400 mt-1">JPG, PNG, HEIC • Max 50MB each</div>
-    </label>
-    <input type="file" id="file-input" accept="image/*" multiple class="hidden">
+    <!-- Drop Zone (desktop) -->
+    <div id="drop-area"
+         class="hidden border-2 border-dashed border-gray-200 rounded-xl py-4 px-4 text-center mb-3">
+        <p class="text-sm text-gray-400">or drag &amp; drop files here</p>
+        <div class="text-xs text-gray-400 mt-0.5">JPG, PNG, HEIC, WEBP • Max 50MB each</div>
+    </div>
 
     <!-- Upload Status -->
     <div id="upload-status" class="hidden px-4 py-2.5 rounded-lg text-sm text-center"></div>
@@ -225,6 +230,34 @@
         saveWorker();
     }
 
+    // When user finishes typing their name, register it so it appears in future visits.
+    document.getElementById('other-name').addEventListener('blur', function() {
+        var name = this.value.trim();
+        if (name.length < 2) return;
+        fetch('/api/workers/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name })
+        }).then(function(res) { return res.ok ? res.json() : null; })
+        .then(function(data) {
+            if (!data || !data.id) return;
+            var sel = document.getElementById('worker-select');
+            // Add option if not already present
+            var exists = Array.from(sel.options).some(function(o) { return o.value === String(data.id); });
+            if (!exists) {
+                var otherOpt = sel.querySelector('option[value="other"]');
+                var opt = document.createElement('option');
+                opt.value = String(data.id);
+                opt.text = data.name;
+                sel.insertBefore(opt, otherOpt);
+            }
+            // Switch dropdown from free-text to the real worker
+            sel.value = String(data.id);
+            document.getElementById('other-name').classList.add('hidden');
+            localStorage.setItem(WORKER_KEY, JSON.stringify({ id: String(data.id), name: data.name }));
+        }).catch(function() {}); // silent — don't interrupt the user
+    });
+
     function getWorkerInfo() {
         var sel = document.getElementById('worker-select');
         if (sel.value === 'other') {
@@ -317,24 +350,24 @@
         document.getElementById('upload-status').style.display = 'none';
     }
 
-    // ─── Drag & Drop ────────────────────────────────────
+    // ─── Drag & Drop (desktop) ───────────────────────────
     var dropArea = document.getElementById('drop-area');
-    ['dragenter', 'dragover'].forEach(function(evt) {
-        dropArea.addEventListener(evt, function(e) {
+    // Also allow dropping anywhere on the page body for convenience
+    [document.body, dropArea].forEach(function(target) {
+        target.addEventListener('dragover', function(e) { e.preventDefault(); });
+        target.addEventListener('drop', function(e) {
             e.preventDefault();
-            dropArea.style.borderColor = '#006778';
-            dropArea.style.backgroundColor = 'rgba(0,103,120,0.05)';
+            if (e.dataTransfer.files.length > 0) handleFiles(e.dataTransfer.files);
         });
     });
-    ['dragleave', 'drop'].forEach(function(evt) {
-        dropArea.addEventListener(evt, function(e) {
-            e.preventDefault();
-            dropArea.style.borderColor = '';
-            dropArea.style.backgroundColor = '';
-        });
+    dropArea.addEventListener('dragenter', function(e) {
+        e.preventDefault();
+        dropArea.style.borderColor = '#006778';
+        dropArea.style.backgroundColor = 'rgba(0,103,120,0.05)';
     });
-    dropArea.addEventListener('drop', function(e) {
-        handleFiles(e.dataTransfer.files);
+    dropArea.addEventListener('dragleave', function() {
+        dropArea.style.borderColor = '';
+        dropArea.style.backgroundColor = '';
     });
 
     // ─── Lightbox ───────────────────────────────────────
@@ -631,10 +664,29 @@
     // ─── Feature Detection ─────────────────────────────
     if (hasGetUserMedia()) {
         document.getElementById('rapid-shoot-btn').style.display = 'block';
-        var label = document.getElementById('camera-label');
-        label.className = 'block w-full py-3 bg-gray-200 text-gray-600 text-center text-sm font-semibold rounded-xl cursor-pointer active:bg-gray-300 transition-colors mb-3';
-        label.textContent = '📷 Single Photo (Fallback)';
     }
+    // Show drag-drop zone on desktop (non-touch or wide screen)
+    if (!('ontouchstart' in window) || window.innerWidth >= 768) {
+        document.getElementById('drop-area').classList.remove('hidden');
+    }
+
+    // ─── Lightbox Swipe (mobile) ────────────────────────
+    (function() {
+        var body = document.getElementById('lb-body');
+        var startX = 0;
+        var startY = 0;
+        body.addEventListener('touchstart', function(e) {
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+        }, { passive: true });
+        body.addEventListener('touchend', function(e) {
+            var dx = e.changedTouches[0].clientX - startX;
+            var dy = e.changedTouches[0].clientY - startY;
+            if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) return;
+            if (dx < 0 && currentPhoto < photos.length - 1) showPhoto(currentPhoto + 1);
+            if (dx > 0 && currentPhoto > 0) showPhoto(currentPhoto - 1);
+        }, { passive: true });
+    })();
 
     // ─── Lightbox Swipe (mobile) ────────────────────────
     (function() {

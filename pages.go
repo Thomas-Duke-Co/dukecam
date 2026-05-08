@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"html/template"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -10,6 +11,20 @@ import (
 
 	"github.com/labstack/echo/v4"
 )
+
+// ─── Inspection summary for home page ───────────────────────────
+
+type InspectionSummary struct {
+	ID             int
+	PropertyName   string
+	TemplateName   string
+	InspectorName  string
+	Status         string // "draft", "in_progress", "completed"
+	StatusLabel    string
+	CompletedCount int
+	TotalCount     int
+	ProgressPct    int
+}
 
 // ─── Day-grouped photos ─────────────────────────────────────────
 
@@ -78,13 +93,35 @@ func makeLightboxData(photos []PhotoWithWorker, slug string) template.JS {
 // ─── Page Handlers ───────────────────────────────────────────────
 
 func (a *App) HomePage(c echo.Context) error {
-	summaries, err := a.db.ListProjectSummaries(c.Request().Context())
+	ctx := c.Request().Context()
+
+	summaries, err := a.db.ListProjectSummaries(ctx)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load projects")
 	}
 
+	// Load inspection summaries (gracefully returns empty if table doesn't exist yet)
+	inspections := a.listInspectionSummaries(ctx)
+
+	// Load properties from PropertyOS for the inspection filter dropdown (gracefully degrades)
+	var properties []Building
+	if a.propertyOS.IsConfigured() {
+		allBuildings, err := a.propertyOS.ListBuildings(ctx)
+		if err != nil {
+			log.Printf("PropertyOS fetch for home page: %v", err)
+		} else {
+			for _, b := range allBuildings {
+				if b.Active {
+					properties = append(properties, b)
+				}
+			}
+		}
+	}
+
 	return c.Render(http.StatusOK, "home", map[string]interface{}{
-		"ProjectData": summaries,
+		"ProjectData":    summaries,
+		"InspectionData": inspections,
+		"Properties":     properties,
 	})
 }
 
@@ -180,6 +217,10 @@ func (a *App) AdminPage(c echo.Context) error {
 		"Workers":  workers,
 		"BaseURL":  a.config.BaseURL,
 	})
+}
+
+func (a *App) OfflinePage(c echo.Context) error {
+	return c.Render(http.StatusOK, "offline", nil)
 }
 
 func (a *App) WhyPage(c echo.Context) error {

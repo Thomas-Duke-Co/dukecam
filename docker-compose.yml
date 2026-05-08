@@ -3,6 +3,8 @@ services:
     build: .
     container_name: dukecam
     restart: unless-stopped
+    env_file:
+      - .env
     ports:
       - "4010:4010"
     environment:
@@ -12,14 +14,15 @@ services:
       - BASE_URL=https://dukecam.thomasduke.io
       - MAX_UPLOAD_MB=50
       - PORT=4010
+      - FYXT_URL=https://open.apifyxt.com
+      - FYXT_API_KEY=${FYXT_API_KEY:-}
+      - FYXT_SCHEMA=thomasduke
+      - PROPERTYOS_URL=http://property-dashboard:3000
+      - PROPERTYOS_TOKEN=${PROPERTYOS_TOKEN:-}
     volumes:
-      - photo-data:/data
+      - /mnt/unas/dukecam:/data
     networks:
       - postgres-net
-
-volumes:
-  photo-data:
-    driver: local
 
 networks:
   postgres-net:

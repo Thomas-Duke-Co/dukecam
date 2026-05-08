@@ -13,7 +13,7 @@
  */
 
 const DB_NAME = 'dukecam';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_NAME = 'upload_queue';
 const MAX_CONCURRENT = 2;
 const MAX_RETRIES = 10;
@@ -35,6 +35,21 @@ async function openDB() {
                 if (!database.objectStoreNames.contains(STORE_NAME)) {
                     const store = database.createObjectStore(STORE_NAME, { keyPath: 'id' });
                     store.createIndex('status', 'status', { unique: false });
+                }
+                // v3: Inspection offline stores (also created by inspection-offline.js)
+                if (!database.objectStoreNames.contains('inspection_drafts')) {
+                    const draftStore = database.createObjectStore('inspection_drafts', { keyPath: 'localId' });
+                    draftStore.createIndex('serverId', 'serverId', { unique: false });
+                    draftStore.createIndex('status', 'status', { unique: false });
+                    draftStore.createIndex('syncStatus', 'syncStatus', { unique: false });
+                    draftStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+                }
+                if (!database.objectStoreNames.contains('inspection_photos')) {
+                    const photoStore = database.createObjectStore('inspection_photos', { keyPath: 'id' });
+                    photoStore.createIndex('inspectionLocalId', 'inspectionLocalId', { unique: false });
+                    photoStore.createIndex('syncStatus', 'syncStatus', { unique: false });
+                    photoStore.createIndex('itemKey', 'itemKey', { unique: false });
+                    photoStore.createIndex('queuedAt', 'queuedAt', { unique: false });
                 }
             };
             req.onsuccess = (e) => {
@@ -107,6 +122,7 @@ function dbGetPending() {
 async function enqueueFiles(files, projectId, workerId, workerName, caption, tag) {
     console.log(`[DukeCam] enqueueFiles: ${files.length} files, project=${projectId}, worker=${workerId || workerName || 'none'}, tag=${tag}`);
     const batchId = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString());
+    let readFailures = 0;
 
     for (const file of files) {
         const sizeMB = (file.size / 1024 / 1024).toFixed(1);
@@ -115,6 +131,12 @@ async function enqueueFiles(files, projectId, workerId, workerName, caption, tag
         try {
             const buffer = await file.arrayBuffer();
             console.log(`[DukeCam] Read ${buffer.byteLength} bytes from ${file.name}`);
+
+            if (buffer.byteLength === 0) {
+                console.warn(`[DukeCam] Empty buffer for ${file.name} — skipping (file may not be locally available)`);
+                readFailures++;
+                continue;
+            }
 
             const item = {
                 id: `${batchId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -144,13 +166,35 @@ async function enqueueFiles(files, projectId, workerId, workerName, caption, tag
             }
         } catch (err) {
             console.error(`[DukeCam] Failed to read file ${file.name}:`, err);
-            showToast(`Failed to read ${file.name}`, 'error');
+            readFailures++;
         }
+    }
+
+    if (readFailures > 0) {
+        const msg = readFailures === files.length
+            ? `Could not read ${readFailures} photo${readFailures > 1 ? 's' : ''} — photos may not be downloaded from cloud yet`
+            : `${readFailures} of ${files.length} photos could not be read — they may not be downloaded from cloud yet`;
+        showToast(msg, 'error');
+        console.warn(`[DukeCam] ${readFailures} file(s) failed to read`);
     }
 
     if (dbAvailable) {
         console.log(`[DukeCam] All files queued, starting processQueue`);
+        // Register for Background Sync so SW can upload even if tab closes
+        registerPhotoSync();
         processQueue();
+    }
+}
+
+async function registerPhotoSync() {
+    if ('serviceWorker' in navigator && 'SyncManager' in window) {
+        try {
+            const reg = await navigator.serviceWorker.ready;
+            await reg.sync.register('photo-upload-sync');
+            console.log('[DukeCam] Background Sync registered: photo-upload-sync');
+        } catch (err) {
+            console.warn('[DukeCam] Background Sync registration failed:', err);
+        }
     }
 }
 

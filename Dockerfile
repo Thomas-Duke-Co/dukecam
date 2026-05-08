@@ -1,14 +1,15 @@
 FROM golang:1.23-alpine AS builder
 
-RUN apk add --no-cache git
+# CGO required for goheif (HEIC/HEIF decoding via libde265)
+RUN apk add --no-cache git gcc g++ musl-dev libde265-dev
 WORKDIR /build
 COPY . .
-RUN go get github.com/rwcarlsen/goexif@latest && \
-    go mod tidy && \
-    CGO_ENABLED=0 go build -ldflags="-s -w" -o dukecam .
+RUN go mod download && \
+    go build -ldflags="-s -w" -o dukecam .
 
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates
+# libde265 runtime library required by goheif
+RUN apk add --no-cache ca-certificates libde265
 WORKDIR /app
 COPY --from=builder /build/dukecam .
 COPY --from=builder /build/templates ./templates

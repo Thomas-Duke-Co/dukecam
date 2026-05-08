@@ -1,0 +1,92 @@
+{{define "title"}}DukeCam — Offline{{end}}
+{{define "head"}}{{end}}
+{{define "header_right"}}{{end}}
+{{define "content"}}
+<div class="flex flex-col items-center justify-center min-h-[70vh] px-6 text-center">
+    <!-- Offline icon -->
+    <div class="w-20 h-20 rounded-full bg-duke-dark/10 flex items-center justify-center mb-6">
+        <svg class="w-10 h-10 text-duke-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M18.364 5.636a9 9 0 010 12.728M5.636 18.364a9 9 0 010-12.728"/>
+            <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+    </div>
+
+    <h1 class="text-2xl font-bold text-duke-dark mb-2">You're Offline</h1>
+    <p class="text-gray-600 mb-6 max-w-sm">
+        This page hasn't been cached yet. Connect to WiFi or cellular data to load it.
+    </p>
+
+    <!-- What still works -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 max-w-sm w-full mb-6">
+        <h2 class="text-sm font-semibold text-duke-teal uppercase tracking-wide mb-3">What still works offline</h2>
+        <ul class="text-sm text-gray-700 space-y-2 text-left">
+            <li class="flex items-start gap-2">
+                <svg class="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                <span>Take photos — they'll queue and upload when you reconnect</span>
+            </li>
+            <li class="flex items-start gap-2">
+                <svg class="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                <span>Run inspections — full checklist saved locally</span>
+            </li>
+            <li class="flex items-start gap-2">
+                <svg class="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                <span>Browse pages you've visited before (cached)</span>
+            </li>
+        </ul>
+    </div>
+
+    <div class="space-y-3">
+        <a href="/" class="inline-flex items-center gap-2 px-5 py-2.5 bg-duke-teal text-white rounded-lg font-semibold text-sm hover:bg-duke-dark transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+            </svg>
+            Go to Home (cached)
+        </a>
+        <p class="text-xs text-gray-400">
+            <span id="pending-count"></span>
+        </p>
+    </div>
+</div>
+
+<script>
+// Show pending sync count
+(function() {
+    if (!window.indexedDB) return;
+    var el = document.getElementById('pending-count');
+    try {
+        var req = indexedDB.open('dukecam', 3);
+        req.onsuccess = function(e) {
+            var db = e.target.result;
+            var total = 0;
+            var checked = 0;
+            var stores = ['upload_queue', 'inspection_drafts', 'inspection_photos'];
+            var available = stores.filter(function(s) { return db.objectStoreNames.contains(s); });
+            if (available.length === 0) { db.close(); return; }
+            var tx = db.transaction(available, 'readonly');
+            available.forEach(function(name) {
+                var idx = name === 'upload_queue' ? 'status' : 'syncStatus';
+                var store = tx.objectStore(name);
+                if (store.indexNames.contains(idx)) {
+                    var cr = store.index(idx).count('pending');
+                    cr.onsuccess = function() { total += (cr.result || 0); };
+                }
+            });
+            tx.oncomplete = function() {
+                db.close();
+                if (total > 0 && el) {
+                    el.textContent = total + ' item' + (total !== 1 ? 's' : '') + ' waiting to sync';
+                }
+            };
+        };
+    } catch(e) {}
+})();
+</script>
+{{end}}
+{{define "scripts"}}{{end}}

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	_ "github.com/adrium/goheif" // registers HEIC/HEIF decoder via image.RegisterFormat
 	"github.com/disintegration/imaging"
 	"github.com/rwcarlsen/goexif/exif"
 )

@@ -83,6 +83,11 @@ func (a *App) UploadPhoto(c echo.Context) error {
 	if ext == "" || !isAllowedExt(ext) {
 		ext = ".jpg"
 	}
+	// HEIC/HEIF: the goheif library decodes these to image.Image, then we save
+	// as JPEG. Remap extension so the stored file is served as a renderable JPEG.
+	if ext == ".heic" || ext == ".heif" {
+		ext = ".jpg"
+	}
 
 	// Process image (decode, orient, thumbnail, EXIF)
 	processed, err := ProcessUpload(data)
@@ -105,7 +110,7 @@ func (a *App) UploadPhoto(c echo.Context) error {
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "save failed"})
 			}
 		} else {
-			if err := SaveImage(processed.Image, photoPath, 85); err != nil {
+			if err := SaveImage(processed.Image, photoPath, 95); err != nil {
 				log.Printf("save photo error: %v", err)
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "save failed"})
 			}
@@ -285,6 +290,41 @@ func (a *App) CreateProject(c echo.Context) error {
 	return renderFragment(c, "project-item", ap)
 }
 
+// RegisterWorker is called from the project page when a user types a custom name.
+// It finds an existing worker with that name (case-insensitive) or creates a new one,
+// returning the worker ID so the frontend can switch from the free-text input to a real dropdown entry.
+func (a *App) RegisterWorker(c echo.Context) error {
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+	}
+	name := strings.TrimSpace(body.Name)
+	if len(name) < 2 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "name too short"})
+	}
+	if len(name) > 100 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "name too long"})
+	}
+
+	ctx := c.Request().Context()
+	worker, err := a.db.FindWorkerByName(ctx, name)
+	if err != nil {
+		shortCode := uuid.New().String()[:8]
+		worker, err = a.db.CreateWorker(ctx, name, shortCode)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to register"})
+		}
+		log.Printf("worker auto-registered: id=%d name=%q", worker.ID, worker.Name)
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"id":   worker.ID,
+		"name": worker.Name,
+	})
+}
+
 func (a *App) CreateWorker(c echo.Context) error {
 	name := c.FormValue("name")
 	if name == "" {
@@ -450,7 +490,7 @@ func renderFragment(c echo.Context, name string, data interface{}) error {
 
 func isAllowedExt(ext string) bool {
 	switch ext {
-	case ".jpg", ".jpeg", ".png", ".heic", ".webp":
+	case ".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif":
 		return true
 	}
 	return false

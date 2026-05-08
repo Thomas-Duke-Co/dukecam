@@ -1,0 +1,155 @@
+{{define "title"}}Inspection — {{.Inspection.PropertyName}}{{end}}
+
+{{define "header_right"}}<span class="text-duke-light text-xs font-medium px-2 py-1 bg-white/10 rounded-full">Read Only</span>{{end}}
+
+{{define "content"}}
+<!-- Header -->
+<div class="bg-white border-b border-gray-200 px-4 py-3 sticky top-[52px] z-40">
+    <div class="flex items-center justify-between gap-3">
+        <div class="flex-1 min-w-0">
+            <h1 class="text-base font-bold text-duke-dark truncate">{{.Inspection.PropertyName}}</h1>
+            <div class="text-xs text-gray-400 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                {{if .Inspection.InspectorName}}<span>{{.Inspection.InspectorName}}</span>{{end}}
+                {{if eq .Inspection.Status "completed"}}
+                <span class="text-green-600 font-medium">✓ Completed</span>
+                {{else if eq .Inspection.Status "in_progress"}}
+                <span class="text-amber-600 font-medium">In Progress</span>
+                {{else}}
+                <span class="text-gray-500">Draft</span>
+                {{end}}
+            </div>
+        </div>
+        <!-- Print button -->
+        <a href="javascript:window.print()" onclick="event.preventDefault(); window.open(window.location.href.replace('/share/inspection/', '/inspection/').replace(window.location.pathname, '') + '/inspection/{{.Inspection.ID}}/print', '_blank')"
+           class="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors active:scale-95">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+            </svg>
+            PDF
+        </a>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="mt-2 pt-2 border-t border-gray-100">
+        <div class="flex items-center justify-between text-xs mb-1">
+            <span class="font-semibold text-duke-dark">{{.Stats.Completed}} / {{.Stats.Total}} items</span>
+            <span class="text-gray-400">{{.Stats.ProgressPct}}%</span>
+        </div>
+        <div class="w-full bg-gray-200 rounded-full h-2">
+            <div class="h-2 rounded-full bg-duke-teal" style="width: {{.Stats.ProgressPct}}%"></div>
+        </div>
+        <div class="flex gap-3 mt-1.5 text-[11px]">
+            <span class="text-green-600">✓ {{.Stats.Passed}} pass</span>
+            <span class="text-red-600">✗ {{.Stats.Failed}} fail</span>
+            <span class="text-amber-600">⚠ {{.Stats.NeedsAttention}} attention</span>
+        </div>
+    </div>
+</div>
+
+<!-- Checklist (read-only) -->
+<div class="px-4 py-4 space-y-6 pb-8">
+    {{if .RenderedCategories}}
+    {{range .RenderedCategories}}
+    <div>
+        <div class="flex items-center gap-2 mb-3">
+            <h2 class="text-sm font-bold text-duke-dark uppercase tracking-wide">{{.Name}}</h2>
+            <span class="text-[10px] text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">{{.ItemCount}} items</span>
+        </div>
+        <div class="space-y-2">
+            {{safeHTML .ItemsHTML}}
+        </div>
+    </div>
+    {{end}}
+    {{else}}
+    <div class="text-center py-12 text-gray-400">
+        <p class="text-sm">No checklist items in this inspection.</p>
+    </div>
+    {{end}}
+</div>
+
+<!-- Branding footer -->
+<div class="px-4 pb-8 text-center text-xs text-gray-400 border-t border-gray-100 pt-4">
+    Shared via <span class="font-semibold text-duke-dark">DukeCam</span>
+</div>
+
+<!-- Lightbox -->
+<div id="share-lightbox" class="fixed inset-0 z-50 bg-black/90 hidden flex items-center justify-center"
+     onclick="closeShareLightbox(event)">
+    <button onclick="closeShareLightbox()" class="absolute top-4 right-4 text-white/80 hover:text-white z-10 p-2" aria-label="Close">
+        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+    </button>
+    <button id="slb-prev" onclick="slbNav(-1); event.stopPropagation();"
+        class="absolute left-2 top-1/2 -translate-y-1/2 z-10 p-3 text-white/60 hover:text-white transition-colors hidden" aria-label="Previous">
+        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+        </svg>
+    </button>
+    <button id="slb-next" onclick="slbNav(1); event.stopPropagation();"
+        class="absolute right-14 top-1/2 -translate-y-1/2 z-10 p-3 text-white/60 hover:text-white transition-colors hidden" aria-label="Next">
+        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+        </svg>
+    </button>
+    <div id="slb-counter" class="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/50 text-sm hidden select-none"></div>
+    <img id="slb-img" src="" alt="Inspection photo" class="max-w-[95vw] max-h-[90vh] object-contain rounded-lg shadow-2xl" />
+</div>
+
+<script>
+var _slbPhotos = [], _slbIndex = 0, _slbTouchX = 0;
+
+function openShareLightbox(photoId, galleryId) {
+    var gallery = galleryId ? document.getElementById(galleryId) : null;
+    if (gallery) {
+        var btns = gallery.querySelectorAll('[data-photo-id]');
+        _slbPhotos = Array.from(btns).map(function(b) { return parseInt(b.dataset.photoId); });
+        _slbIndex = _slbPhotos.indexOf(photoId);
+        if (_slbIndex < 0) _slbIndex = 0;
+    } else {
+        _slbPhotos = [photoId]; _slbIndex = 0;
+    }
+    document.getElementById('share-lightbox').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    _slbRender();
+}
+
+function _slbRender() {
+    document.getElementById('slb-img').src = '/api/inspections/photos/' + _slbPhotos[_slbIndex];
+    var multi = _slbPhotos.length > 1;
+    var counter = document.getElementById('slb-counter');
+    counter.textContent = (_slbIndex + 1) + ' / ' + _slbPhotos.length;
+    counter.classList.toggle('hidden', !multi);
+    document.getElementById('slb-prev').classList.toggle('hidden', !multi || _slbIndex === 0);
+    document.getElementById('slb-next').classList.toggle('hidden', !multi || _slbIndex === _slbPhotos.length - 1);
+}
+
+function slbNav(dir) {
+    var n = _slbIndex + dir;
+    if (n >= 0 && n < _slbPhotos.length) { _slbIndex = n; _slbRender(); }
+}
+
+function closeShareLightbox(e) {
+    if (e && e.target !== e.currentTarget && e.target.id !== 'share-lightbox') return;
+    document.getElementById('share-lightbox').classList.add('hidden');
+    document.body.style.overflow = '';
+    document.getElementById('slb-img').src = '';
+}
+
+document.addEventListener('keydown', function(e) {
+    if (document.getElementById('share-lightbox').classList.contains('hidden')) return;
+    if (e.key === 'Escape') closeShareLightbox();
+    if (e.key === 'ArrowLeft') slbNav(-1);
+    if (e.key === 'ArrowRight') slbNav(1);
+});
+
+(function() {
+    var lb = document.getElementById('share-lightbox');
+    lb.addEventListener('touchstart', function(e) { _slbTouchX = e.touches[0].clientX; }, {passive:true});
+    lb.addEventListener('touchend', function(e) {
+        var dx = e.changedTouches[0].clientX - _slbTouchX;
+        if (Math.abs(dx) > 50) slbNav(dx < 0 ? 1 : -1);
+    }, {passive:true});
+})();
+</script>
+{{end}}

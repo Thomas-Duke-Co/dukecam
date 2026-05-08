@@ -1,5 +1,5 @@
 # Binary
-dukecam
+/dukecam
 
 # Go
 *.exe
@@ -9,7 +9,10 @@ dukecam
 *.dylib
 *.test
 *.out
-go.sum
+
+# Env / logs
+.env
+*.log
 
 # IDE
 .vscode/

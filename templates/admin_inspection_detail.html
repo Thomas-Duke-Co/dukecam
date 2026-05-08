@@ -1,0 +1,84 @@
+{{define "title"}}{{.Template.Name}} — Inspection Template — DukeCam{{end}}
+{{define "header_right"}}<a href="/admin/inspections" class="text-duke-light hover:text-white transition-colors">← Templates</a>{{end}}
+
+{{define "content"}}
+<div class="max-w-4xl mx-auto p-4 space-y-6">
+
+    <!-- Template Header (editable) -->
+    <div id="template-header">
+        {{template "inspection-template-header" .Template}}
+    </div>
+
+    <!-- Categories & Items -->
+    <div class="space-y-4">
+        <div class="flex items-center justify-between">
+            <h2 class="text-base font-bold text-duke-dark">📋 Categories & Checklist Items</h2>
+            <span class="text-xs text-gray-400">Drag to reorder (coming soon)</span>
+        </div>
+
+        <!-- Category List -->
+        <div id="category-list" class="space-y-4">
+            {{range .Template.Categories}}
+            {{template "inspection-category-item" .}}
+            {{end}}
+        </div>
+
+        <!-- Add Category Form -->
+        <div class="bg-white rounded-xl p-4 shadow-sm border-2 border-dashed border-gray-200">
+            <form hx-post="/api/admin/inspection-template/{{.Template.ID}}/category"
+                  hx-target="#category-list" hx-swap="beforeend"
+                  hx-on::after-request="if(event.detail.successful) this.reset()"
+                  class="flex gap-2">
+                <input name="name" placeholder="New category name (e.g., Kitchen, Bathroom, Exterior...)" required
+                       class="flex-1 px-3 py-2.5 border-2 border-gray-200 rounded-lg text-base focus:border-duke-teal focus:outline-none">
+                <button type="submit"
+                        class="px-4 py-2.5 bg-duke-teal text-white rounded-lg font-semibold hover:bg-duke-dark transition-colors whitespace-nowrap text-sm">
+                    + Add Category
+                </button>
+            </form>
+        </div>
+    </div>
+
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+// Confirmation for destructive actions
+document.body.addEventListener('htmx:confirm', function(e) {
+    if (e.detail.elt.dataset.confirm) {
+        e.preventDefault();
+        if (confirm(e.detail.elt.dataset.confirm)) {
+            e.detail.issueRequest();
+        }
+    }
+});
+
+// Toggle edit mode for category names
+function toggleCategoryEdit(catId) {
+    const display = document.getElementById('cat-display-' + catId);
+    const edit = document.getElementById('cat-edit-' + catId);
+    if (display && edit) {
+        display.classList.toggle('hidden');
+        edit.classList.toggle('hidden');
+        if (!edit.classList.contains('hidden')) {
+            edit.querySelector('input[name="name"]').focus();
+        }
+    }
+}
+
+// Toggle inline edit for item rows
+function toggleItemEdit(itemId) {
+    const display = document.getElementById('item-display-' + itemId);
+    const edit = document.getElementById('item-edit-' + itemId);
+    if (display && edit) {
+        display.classList.toggle('hidden');
+        edit.classList.toggle('hidden');
+        if (!edit.classList.contains('hidden')) {
+            edit.querySelector('input[name="label"]').focus();
+        }
+    }
+}
+
+</script>
+{{end}}

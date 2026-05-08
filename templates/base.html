@@ -11,7 +11,7 @@
     <link rel="icon" href="/static/img/tduke-favicon.jpg">
     <link rel="apple-touch-icon" href="/static/img/tduke-favicon.jpg">
     <link rel="manifest" href="/static/manifest.json">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/static/js/tailwind.js"></script>
     <script>
     tailwind.config = {
         theme: {
@@ -29,7 +29,7 @@
         }
     }
     </script>
-    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script src="/static/js/htmx.min.js"></script>
     <style>
         /* Toast animations */
         .toast { transform: translateY(20px); opacity: 0; transition: all 0.3s ease; }
@@ -55,16 +55,227 @@
     <header class="bg-duke-dark text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-50 shadow-lg">
         <a href="/"><img src="/static/img/tduke-logo.png" alt="Thomas Duke" class="h-8 w-auto"></a>
         <a href="/" class="text-lg font-bold tracking-wide text-white no-underline hover:text-duke-light">DukeCam</a>
-        <div class="ml-auto flex items-center">{{template "header_right" .}}</div>
+        <div class="ml-auto flex items-center gap-2">
+            <!-- Online/offline status dot + sync queue badge -->
+            <div class="relative" id="sync-status-wrapper" title="Online">
+                <div id="online-status-dot" class="w-2.5 h-2.5 rounded-full bg-green-400 transition-colors duration-300"></div>
+                <span id="sync-queue-badge" class="hidden absolute -top-1.5 -right-1.5 min-w-[16px] h-4 bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-0.5"></span>
+            </div>
+            {{template "header_right" .}}
+        </div>
         <a href="/why" class="ml-4 px-3 py-1.5 border border-white/40 rounded-md text-xs font-semibold text-duke-light hover:border-white hover:text-white hover:bg-white/10 transition-all whitespace-nowrap">Why DukeCam?</a>
     </header>
 
     {{template "content" .}}
 
+    <!-- Global Offline Banner -->
+    <div id="offline-banner" class="fixed top-[52px] left-0 right-0 z-[60] bg-red-600 text-white text-xs font-semibold text-center py-1.5 px-4 hidden transition-all duration-300"
+         style="transform: translateY(-100%);">
+        <div class="flex items-center justify-center gap-2">
+            <svg class="w-3.5 h-3.5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728M5.636 18.364a9 9 0 010-12.728M15.536 8.464a5 5 0 010 7.072M8.464 15.536a5 5 0 010-7.072"/>
+            </svg>
+            <span>Offline — changes saved locally, will sync when reconnected</span>
+            <span id="offline-pending-badge" class="ml-1 bg-white/20 rounded-full px-2 py-0.5 text-[10px] hidden">0 pending</span>
+        </div>
+    </div>
+
+    <!-- Back Online Banner (brief flash) -->
+    <div id="online-banner" class="fixed top-[52px] left-0 right-0 z-[60] bg-green-600 text-white text-xs font-semibold text-center py-1.5 px-4 hidden transition-all duration-300"
+         style="transform: translateY(-100%);">
+        <div class="flex items-center justify-center gap-2">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            <span>Back online — syncing now</span>
+        </div>
+    </div>
+
     <!-- Toast Container -->
     <div id="toast-container" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[2000] flex flex-col gap-2 pointer-events-none"></div>
 
+    <!-- Offline/Online Detection (global) -->
+    <script>
+    (function() {
+        var offlineBanner = document.getElementById('offline-banner');
+        var onlineBanner = document.getElementById('online-banner');
+        var pendingBadge = document.getElementById('offline-pending-badge');
+        var statusDot = document.getElementById('online-status-dot');
+        var statusWrapper = document.getElementById('sync-status-wrapper');
+        var _onlineTimeout = null;
+
+        function showBanner(el) {
+            if (!el) return;
+            el.classList.remove('hidden');
+            requestAnimationFrame(function() {
+                el.style.transform = 'translateY(0)';
+            });
+        }
+        function hideBanner(el) {
+            if (!el) return;
+            el.style.transform = 'translateY(-100%)';
+            setTimeout(function() { el.classList.add('hidden'); }, 300);
+        }
+
+        function setDotOnline() {
+            if (statusDot) {
+                statusDot.className = 'w-2.5 h-2.5 rounded-full bg-green-400 transition-colors duration-300';
+            }
+            if (statusWrapper) statusWrapper.title = 'Online';
+        }
+        function setDotOffline() {
+            if (statusDot) {
+                statusDot.className = 'w-2.5 h-2.5 rounded-full bg-red-400 animate-pulse transition-colors duration-300';
+            }
+            if (statusWrapper) statusWrapper.title = 'Offline — changes queued locally';
+        }
+
+        function updateOfflineUI() {
+            if (!navigator.onLine) {
+                hideBanner(onlineBanner);
+                showBanner(offlineBanner);
+                setDotOffline();
+                updatePendingCount();
+            } else {
+                hideBanner(offlineBanner);
+                setDotOnline();
+            }
+        }
+
+        window.addEventListener('offline', function() {
+            if (_onlineTimeout) { clearTimeout(_onlineTimeout); _onlineTimeout = null; }
+            showBanner(offlineBanner);
+            hideBanner(onlineBanner);
+            setDotOffline();
+            updatePendingCount();
+            window.dispatchEvent(new CustomEvent('dukecam:offline'));
+        });
+
+        window.addEventListener('online', function() {
+            hideBanner(offlineBanner);
+            showBanner(onlineBanner);
+            setDotOnline();
+            _onlineTimeout = setTimeout(function() { hideBanner(onlineBanner); }, 3000);
+            window.dispatchEvent(new CustomEvent('dukecam:online'));
+        });
+
+        // Count pending items across IndexedDB stores (upload queue + inspection drafts/photos)
+        function updatePendingCount() {
+            if (!window.indexedDB) return;
+            var totalPending = 0;
+            var storesChecked = 0;
+            var totalStores = 2; // dukecam DB (upload_queue + inspection stores) + legacy inspection sync
+
+            var queueBadge = document.getElementById('sync-queue-badge');
+
+            function finishCheck() {
+                storesChecked++;
+                if (storesChecked >= totalStores) {
+                    // Update offline banner badge
+                    if (pendingBadge) {
+                        if (totalPending > 0) {
+                            pendingBadge.textContent = totalPending + ' pending';
+                            pendingBadge.classList.remove('hidden');
+                        } else {
+                            pendingBadge.classList.add('hidden');
+                        }
+                    }
+                    // Update header sync queue badge
+                    if (queueBadge) {
+                        if (totalPending > 0) {
+                            queueBadge.textContent = totalPending;
+                            queueBadge.classList.remove('hidden');
+                            queueBadge.classList.add('flex');
+                            // Amber dot when syncing
+                            if (statusDot && navigator.onLine) {
+                                statusDot.className = 'w-2.5 h-2.5 rounded-full bg-amber-400 transition-colors duration-300';
+                                if (statusWrapper) statusWrapper.title = 'Syncing ' + totalPending + ' item' + (totalPending !== 1 ? 's' : '');
+                            }
+                        } else {
+                            queueBadge.classList.add('hidden');
+                            queueBadge.classList.remove('flex');
+                            if (navigator.onLine) setDotOnline();
+                        }
+                    }
+                }
+            }
+
+            // Check dukecam DB (upload_queue + inspection_drafts + inspection_photos)
+            try {
+                var req1 = indexedDB.open('dukecam', 3);
+                req1.onsuccess = function(e) {
+                    var _db = e.target.result;
+                    var storesToCheck = [];
+                    if (_db.objectStoreNames.contains('upload_queue')) storesToCheck.push('upload_queue');
+                    if (_db.objectStoreNames.contains('inspection_drafts')) storesToCheck.push('inspection_drafts');
+                    if (_db.objectStoreNames.contains('inspection_photos')) storesToCheck.push('inspection_photos');
+
+                    if (storesToCheck.length === 0) { _db.close(); finishCheck(); return; }
+
+                    var tx = _db.transaction(storesToCheck, 'readonly');
+                    var storesDone = 0;
+
+                    storesToCheck.forEach(function(storeName) {
+                        var store = tx.objectStore(storeName);
+                        // upload_queue uses 'status' index, inspection stores use 'syncStatus'
+                        var indexName = storeName === 'upload_queue' ? 'status' : 'syncStatus';
+                        if (store.indexNames.contains(indexName)) {
+                            var countReq = store.index(indexName).count('pending');
+                            countReq.onsuccess = function() {
+                                totalPending += (countReq.result || 0);
+                            };
+                        }
+                        // Also count 'error' status items for inspection stores
+                        if (storeName !== 'upload_queue' && store.indexNames.contains(indexName)) {
+                            var errReq = store.index(indexName).count('error');
+                            errReq.onsuccess = function() {
+                                totalPending += (errReq.result || 0);
+                            };
+                        }
+                    });
+
+                    tx.oncomplete = function() { _db.close(); finishCheck(); };
+                    tx.onerror = function() { _db.close(); finishCheck(); };
+                };
+                req1.onerror = function() { finishCheck(); };
+            } catch(e) { finishCheck(); }
+
+            // Check legacy inspection sync queue (if exists)
+            try {
+                var req2 = indexedDB.open('dukecam_inspections', 1);
+                req2.onsuccess = function(e) {
+                    var _db = e.target.result;
+                    if (!_db.objectStoreNames.contains('sync_queue')) { _db.close(); finishCheck(); return; }
+                    var tx = _db.transaction('sync_queue', 'readonly');
+                    var countReq = tx.objectStore('sync_queue').index('status').count('pending');
+                    countReq.onsuccess = function() { totalPending += (countReq.result || 0); };
+                    tx.oncomplete = function() { _db.close(); finishCheck(); };
+                };
+                req2.onerror = function() { finishCheck(); };
+            } catch(e) { finishCheck(); }
+        }
+
+        window.dukecamUpdatePendingCount = updatePendingCount;
+
+        // Initial state
+        if (!navigator.onLine) {
+            updateOfflineUI();
+        }
+    })();
+    </script>
+
     {{template "scripts" .}}
+
+    <script>
+    // Register service worker for Background Sync API support
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').then(function(reg) {
+            console.log('[DukeCam] Service worker registered, scope:', reg.scope);
+        }).catch(function(err) {
+            console.warn('[DukeCam] Service worker registration failed:', err.message);
+        });
+    }
+    </script>
 </body>
 </html>
 {{end}}

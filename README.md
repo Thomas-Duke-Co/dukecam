@@ -18,6 +18,26 @@ Built for field crews who need to quickly capture, organize, and share job site 
 - **Lightbox with rotation** — browse photos with arrow keys or swipe on mobile. Rotate incorrectly-oriented photos with one tap.
 - **PWA installable** — add to home screen on iOS/Android for a native app feel.
 
+## Development
+
+```bash
+# Build and run locally (requires Go 1.23+)
+go mod tidy
+go run .
+
+# Or use Docker
+docker compose up --build
+```
+
+## Deployment
+
+```bash
+# Sync to Framework and rebuild
+rsync -avz --delete --exclude .git \
+  ~/claudecode/projects/dukecam/ framework-remote:/opt/apps/dukecam/
+ssh framework-remote "cd /opt/apps/dukecam && docker compose up -d --build"
+```
+
 ## Architecture
 
 Single Go binary + PostgreSQL. No JavaScript build step. Templates are server-rendered HTML with Tailwind CSS (CDN) and vanilla JS.

@@ -1,0 +1,1066 @@
+{{define "title"}}Inspection — {{.Inspection.PropertyName}}{{end}}
+
+{{define "header_right"}}<a href="/?tab=inspections" class="text-duke-light hover:text-white transition-colors">← Back</a>{{end}}
+
+{{define "content"}}
+<!-- Sticky header with property info + progress -->
+<div class="bg-white border-b border-gray-200 px-4 py-3 sticky top-[52px] z-40">
+    <div class="flex items-center justify-between mb-2">
+        <div class="flex-1 min-w-0">
+            <h1 class="text-base font-bold text-duke-dark truncate">{{.Inspection.PropertyName}}</h1>
+            <div class="text-xs text-gray-400 truncate flex items-center gap-1.5">
+                {{if .Inspection.InspectorName}}{{.Inspection.InspectorName}} · {{end}}
+                {{if eq .Inspection.Status "completed"}}Completed
+                {{else if eq .Inspection.Status "in_progress"}}In Progress
+                {{else}}Draft{{end}}
+                <!-- Inline connection indicator -->
+                <span id="header-online-dot" class="inline-block w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" title="Online"></span>
+                <span id="header-sync-badge" class="hidden text-[10px] font-bold text-amber-600 bg-amber-50 rounded-full px-1.5 py-0 leading-4" title="Pending sync items">0</span>
+            </div>
+        </div>
+        {{if ne .Inspection.Status "completed"}}
+        <button hx-post="/api/inspections/{{.Inspection.ID}}/complete"
+                hx-confirm="Mark this inspection as complete?"
+                class="ml-3 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-lg shadow transition-colors active:scale-95 flex-shrink-0">
+            ✓ Complete
+        </button>
+        {{else}}
+        <span class="ml-3 px-3 py-1.5 bg-green-100 text-green-700 text-xs font-bold rounded-lg flex-shrink-0">
+            ✓ Completed
+        </span>
+        {{end}}
+    </div>
+
+    {{if eq .Inspection.Status "completed"}}
+    <!-- Export + share actions -->
+    <div class="flex flex-wrap items-center gap-2 mt-2 pt-2 border-t border-gray-100">
+        <!-- Share read-only link -->
+        <button id="share-btn" onclick="generateShareLink({{.Inspection.ID}})"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-duke-teal bg-duke-teal/5 hover:bg-duke-teal/10 border border-duke-teal/20 rounded-lg transition-colors active:scale-95">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+            </svg>
+            Share Link
+        </button>
+        <!-- Print / PDF -->
+        <a href="/inspection/{{.Inspection.ID}}/print" target="_blank"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded-lg transition-colors active:scale-95">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+            </svg>
+            PDF Report
+        </a>
+        <span class="text-gray-200">·</span>
+        <!-- Create Fyxt Work Order -->
+        <button onclick="openWorkOrderModal()"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-orange-600 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-lg transition-colors active:scale-95">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+            </svg>
+            Create Work Order
+        </button>
+    </div>
+    {{end}}
+
+    <!-- Progress bar -->
+    <div id="inspection-progress">
+        <div class="flex items-center justify-between text-xs mb-1">
+            <span class="font-semibold text-duke-dark">{{.Stats.Completed}} / {{.Stats.Total}} items</span>
+            <span class="text-gray-400">{{.Stats.ProgressPct}}%</span>
+        </div>
+        <div class="w-full bg-gray-200 rounded-full h-2">
+            <div class="h-2 rounded-full bg-duke-teal transition-all duration-300" style="width: {{.Stats.ProgressPct}}%"></div>
+        </div>
+        <div class="flex gap-3 mt-1.5 text-[11px]">
+            <span class="text-green-600">✓ {{.Stats.Passed}} pass</span>
+            <span class="text-red-600">✗ {{.Stats.Failed}} fail</span>
+            <span class="text-amber-600">⚠ {{.Stats.NeedsAttention}} attention</span>
+        </div>
+    </div>
+</div>
+
+<!-- ─── Offline Sync Status Panel ─────────────────────────────── -->
+<div id="inspection-sync-panel" class="mx-4 mt-3 hidden">
+    <!-- Connection status pill -->
+    <div id="sync-status-bar" class="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-300 bg-green-50 text-green-700 border border-green-200">
+        <span id="sync-status-dot" class="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"></span>
+        <span id="sync-status-text">Online</span>
+        <span id="sync-pending-count" class="ml-auto bg-white/80 rounded-full px-2 py-0.5 text-[10px] font-bold hidden">0</span>
+        <button id="sync-toggle-btn" onclick="toggleSyncDetails()" class="ml-1 text-gray-400 hover:text-gray-600 transition-colors hidden" aria-label="Toggle sync details">
+            <svg class="w-4 h-4 transition-transform" id="sync-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Expandable sync details -->
+    <div id="sync-details" class="hidden mt-2 bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+        <div class="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+            <span class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Sync Queue</span>
+            <button id="sync-retry-all-btn" onclick="retrySyncAll()" class="hidden text-[11px] font-semibold text-duke-teal hover:text-duke-dark transition-colors">
+                Retry All
+            </button>
+        </div>
+        <div id="sync-items-list" class="divide-y divide-gray-100 max-h-48 overflow-y-auto">
+            <!-- Dynamic sync items go here -->
+            <div id="sync-empty-state" class="px-3 py-4 text-center text-xs text-gray-400">
+                All synced — nothing pending
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Checklist categories -->
+<div class="px-4 py-4 space-y-6 pb-24">
+    {{if .RenderedCategories}}
+    {{range .RenderedCategories}}
+    <div>
+        <!-- Category header -->
+        <div class="flex items-center gap-2 mb-3">
+            <h2 class="text-sm font-bold text-duke-dark uppercase tracking-wide">{{.Name}}</h2>
+            <span class="text-[10px] text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">{{.ItemCount}} items</span>
+        </div>
+
+        <!-- Items (pre-rendered server-side) -->
+        <div class="space-y-2">
+            {{safeHTML .ItemsHTML}}
+        </div>
+    </div>
+    {{end}}
+    {{else}}
+    <div class="text-center py-12 text-gray-400">
+        <svg class="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+        </svg>
+        <p class="text-sm">Blank inspection — no checklist items</p>
+        <p class="text-xs mt-1">Add ad-hoc items below to start your inspection</p>
+    </div>
+    {{end}}
+
+    <!-- Ad-hoc item form (add items beyond the template) -->
+    {{if ne .Inspection.Status "completed"}}
+    <div class="mt-6">
+        <div class="flex items-center gap-2 mb-3">
+            <h2 class="text-sm font-bold text-duke-dark uppercase tracking-wide">Add Item</h2>
+            <span class="text-[10px] text-indigo-600 bg-indigo-50 rounded-full px-2 py-0.5 font-medium">Ad-hoc</span>
+        </div>
+
+        <!-- Toggle button to show/hide form -->
+        <button id="adhoc-toggle-btn" onclick="document.getElementById('adhoc-form').classList.toggle('hidden'); this.classList.toggle('hidden');"
+                class="w-full border-2 border-dashed border-gray-300 rounded-xl py-3 text-sm text-gray-400 hover:border-indigo-300 hover:text-indigo-500 transition-colors active:scale-[0.98] flex items-center justify-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Add checklist item
+        </button>
+
+        <!-- Inline form (hidden by default) -->
+        <form id="adhoc-form" class="hidden border border-indigo-200 bg-indigo-50/30 rounded-xl p-4 space-y-3"
+              hx-post="/api/inspections/{{.Inspection.ID}}/adhoc"
+              hx-target="#adhoc-items-list"
+              hx-swap="beforeend"
+              hx-on::after-request="if(event.detail.successful){this.reset(); document.getElementById('adhoc-toggle-btn').classList.remove('hidden'); this.classList.add('hidden');}">
+
+            <div>
+                <label class="block text-xs font-semibold text-duke-dark mb-1">Item name <span class="text-red-400">*</span></label>
+                <input type="text" name="label" required placeholder="e.g. Check fire extinguisher expiry"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none">
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-duke-dark mb-1">Description <span class="text-gray-400 font-normal">(optional)</span></label>
+                <input type="text" name="description" placeholder="Brief note about what to check"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none">
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-duke-dark mb-1">Category <span class="text-gray-400 font-normal">(optional)</span></label>
+                <input type="text" name="category_name" placeholder="Ad-hoc Items"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none">
+            </div>
+
+            <div class="flex gap-2 pt-1">
+                <button type="submit"
+                        class="flex-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg shadow transition-colors active:scale-95">
+                    + Add Item
+                </button>
+                <button type="button"
+                        onclick="this.closest('form').classList.add('hidden'); document.getElementById('adhoc-toggle-btn').classList.remove('hidden');"
+                        class="px-4 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-600 text-sm font-medium rounded-lg transition-colors active:scale-95">
+                    Cancel
+                </button>
+            </div>
+        </form>
+
+        <!-- Ad-hoc items land here via HTMX -->
+        <div id="adhoc-items-list" class="space-y-2 mt-3">
+        </div>
+    </div>
+    {{end}}
+</div>
+
+<!-- Floating complete button (mobile) -->
+{{if and (ne .Inspection.Status "completed") (gt .Stats.Total 0)}}
+<div class="fixed bottom-0 left-0 right-0 p-4 bg-white/95 backdrop-blur border-t border-gray-200 z-30">
+    <div class="flex items-center gap-3">
+        <div class="flex-1 min-w-0">
+            <div class="text-xs text-gray-500">
+                {{.Stats.Completed}}/{{.Stats.Total}} checked
+                {{if gt .Stats.Failed 0}}· <span class="text-red-600 font-semibold">{{.Stats.Failed}} failed</span>{{end}}
+                {{if gt .Stats.NeedsAttention 0}}· <span class="text-amber-600 font-semibold">{{.Stats.NeedsAttention}} attention</span>{{end}}
+            </div>
+        </div>
+        <button hx-post="/api/inspections/{{.Inspection.ID}}/complete"
+                hx-confirm="Mark this inspection as complete?"
+                class="px-6 py-3 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-xl shadow-lg transition-colors active:scale-95">
+            ✓ Complete
+        </button>
+    </div>
+</div>
+{{end}}
+
+<!-- ─── Fyxt Work Order Modal ────────────────────────────────────── -->
+<div id="fyxt-wo-modal" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+        <!-- Header -->
+        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <div>
+                <h3 class="text-base font-bold text-duke-dark">Create Work Order</h3>
+                <p class="text-xs text-gray-400 mt-0.5">{{.Inspection.PropertyName}}</p>
+            </div>
+            <button onclick="closeWorkOrderModal()" class="text-gray-300 hover:text-gray-500 transition-colors p-1">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Body -->
+        <div class="px-5 py-4 space-y-4">
+            <!-- Fyxt badge -->
+            <div class="flex items-center gap-2 text-xs text-orange-600 bg-orange-50 rounded-lg px-3 py-2">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                </svg>
+                <span>This will create a work order in Fyxt assigned to Property Management.</span>
+            </div>
+
+            <!-- Description -->
+            <div>
+                <label class="block text-xs font-semibold text-duke-dark mb-1.5">
+                    Description <span class="text-red-400">*</span>
+                </label>
+                <textarea id="wo-description" rows="5"
+                    placeholder="Describe the issue(s) found during the inspection..."
+                    class="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-orange-400 focus:border-orange-400 outline-none resize-none"></textarea>
+                <p id="wo-desc-hint" class="text-[10px] text-gray-400 mt-1 hidden">Pre-filled from flagged items — edit as needed.</p>
+            </div>
+
+            <!-- Priority + Target Date row -->
+            <div class="flex gap-3">
+                <div class="flex-1">
+                    <label class="block text-xs font-semibold text-duke-dark mb-1.5">Priority</label>
+                    <select id="wo-priority"
+                        class="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-orange-400 focus:border-orange-400 outline-none bg-white">
+                        <option value="Low">Low</option>
+                        <option value="Medium" selected>Medium</option>
+                        <option value="High">High</option>
+                        <option value="Emergency">Emergency</option>
+                    </select>
+                </div>
+                <div class="flex-1">
+                    <label class="block text-xs font-semibold text-duke-dark mb-1.5">Target Date <span class="text-gray-400 font-normal">(optional)</span></label>
+                    <input type="date" id="wo-target-date"
+                        class="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-orange-400 focus:border-orange-400 outline-none">
+                </div>
+            </div>
+
+            <!-- Success state (hidden until success) -->
+            <div id="wo-success" class="hidden bg-green-50 border border-green-200 rounded-xl px-4 py-3 space-y-1.5">
+                <div class="flex items-center gap-2 text-green-700 font-semibold text-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <span id="wo-success-msg">Work order created!</span>
+                </div>
+                <a id="wo-fyxt-link" href="#" target="_blank" rel="noopener"
+                    class="block text-xs text-orange-600 underline hover:text-orange-700">
+                    Open in Fyxt →
+                </a>
+            </div>
+
+            <!-- Error state -->
+            <div id="wo-error" class="hidden bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 text-xs text-red-700"></div>
+        </div>
+
+        <!-- Footer -->
+        <div id="wo-footer" class="px-5 pb-5 flex gap-2">
+            <button id="wo-submit-btn" onclick="submitWorkOrder({{.Inspection.ID}})"
+                class="flex-1 px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white text-sm font-bold rounded-xl shadow transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                Create Work Order in Fyxt
+            </button>
+            <button onclick="closeWorkOrderModal()"
+                class="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-xl transition-colors active:scale-95">
+                Cancel
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    const flaggedItems = {{json .FlaggedItems}};
+
+    window.openWorkOrderModal = function() {
+        const modal = document.getElementById('fyxt-wo-modal');
+        const descEl = document.getElementById('wo-description');
+        const hintEl = document.getElementById('wo-desc-hint');
+        const successEl = document.getElementById('wo-success');
+        const errorEl = document.getElementById('wo-error');
+        const footerEl = document.getElementById('wo-footer');
+        const submitBtn = document.getElementById('wo-submit-btn');
+
+        // Reset state
+        successEl.classList.add('hidden');
+        errorEl.classList.add('hidden');
+        footerEl.classList.remove('hidden');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Create Work Order in Fyxt';
+
+        // Pre-fill description from flagged items
+        if (flaggedItems && flaggedItems.length > 0) {
+            descEl.value = 'Issues found during inspection:\n' + flaggedItems.map(i => '- ' + i).join('\n');
+            hintEl.classList.remove('hidden');
+        } else {
+            descEl.value = '';
+            hintEl.classList.add('hidden');
+        }
+
+        modal.classList.remove('hidden');
+        setTimeout(() => descEl.focus(), 100);
+    };
+
+    window.closeWorkOrderModal = function() {
+        document.getElementById('fyxt-wo-modal').classList.add('hidden');
+    };
+
+    window.submitWorkOrder = async function(inspectionId) {
+        const description = document.getElementById('wo-description').value.trim();
+        const priority = document.getElementById('wo-priority').value;
+        const targetDateVal = document.getElementById('wo-target-date').value;
+        const submitBtn = document.getElementById('wo-submit-btn');
+        const errorEl = document.getElementById('wo-error');
+
+        errorEl.classList.add('hidden');
+
+        if (!description) {
+            errorEl.textContent = 'Description is required.';
+            errorEl.classList.remove('hidden');
+            document.getElementById('wo-description').focus();
+            return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Creating…';
+
+        const body = { description, priority };
+        if (targetDateVal) {
+            body.target_date = targetDateVal + 'T00:00:00.000Z';
+        }
+
+        try {
+            const resp = await fetch(`/api/inspections/${inspectionId}/work-order`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+
+            const data = await resp.json();
+
+            if (!resp.ok) {
+                errorEl.textContent = data.error || 'Unknown error creating work order.';
+                errorEl.classList.remove('hidden');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create Work Order in Fyxt';
+                return;
+            }
+
+            // Show success
+            document.getElementById('wo-footer').classList.add('hidden');
+            const successEl = document.getElementById('wo-success');
+            document.getElementById('wo-success-msg').textContent = data.message || 'Work order created!';
+            document.getElementById('wo-fyxt-link').href = data.fyxt_url || '#';
+            successEl.classList.remove('hidden');
+
+        } catch (err) {
+            errorEl.textContent = 'Network error: ' + err.message;
+            errorEl.classList.remove('hidden');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Create Work Order in Fyxt';
+        }
+    };
+
+    // Close modal on backdrop click
+    document.getElementById('fyxt-wo-modal').addEventListener('click', function(e) {
+        if (e.target === this) closeWorkOrderModal();
+    });
+})();
+</script>
+
+<!-- ─── Rapid Shoot Overlay ──────────────────────────────────────── -->
+<div id="rapid-shoot-bar" class="hidden fixed bottom-20 left-0 right-0 px-4 z-40 pointer-events-none">
+    <div class="bg-duke-dark/95 backdrop-blur text-white rounded-xl px-4 py-3 flex items-center gap-3 shadow-xl border border-white/10 pointer-events-auto">
+        <div class="w-8 h-8 bg-duke-teal/20 rounded-full flex items-center justify-center flex-shrink-0">
+            <svg class="w-4 h-4 text-duke-teal" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M11.983 1.907a.75.75 0 00-1.292-.657l-8.5 9.5A.75.75 0 002.75 12h6.572l-1.305 6.093a.75.75 0 001.292.657l8.5-9.5A.75.75 0 0017.25 8h-6.572l1.305-6.093z"/>
+            </svg>
+        </div>
+        <div class="flex-1 min-w-0">
+            <div class="text-xs font-bold">Rapid Shoot</div>
+            <div class="text-[10px] text-gray-300 mt-0.5 flex items-center gap-1.5">
+                <span id="rapid-shoot-count">0 photos taken</span>
+                <span id="rapid-shoot-uploading" class="text-duke-teal"></span>
+            </div>
+        </div>
+        <button onclick="stopRapidShoot()"
+            class="px-4 py-2 bg-white/15 hover:bg-white/25 text-white text-xs font-bold rounded-lg transition-colors active:scale-95 flex-shrink-0">
+            Done
+        </button>
+    </div>
+</div>
+
+<!-- ─── Photo Lightbox Overlay ──────────────────────────────────── -->
+<div id="photo-lightbox" class="fixed inset-0 z-50 bg-black/90 hidden flex items-center justify-center"
+     onclick="closeLightbox(event)">
+    <!-- Close -->
+    <button onclick="closeLightbox()" class="absolute top-4 right-4 text-white/80 hover:text-white z-10 p-2" aria-label="Close">
+        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+    </button>
+    <!-- Prev -->
+    <button id="lightbox-prev" onclick="lbNav(-1); event.stopPropagation();"
+        class="absolute left-2 top-1/2 -translate-y-1/2 z-10 p-3 text-white/60 hover:text-white transition-colors hidden"
+        aria-label="Previous photo">
+        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+        </svg>
+    </button>
+    <!-- Next -->
+    <button id="lightbox-next" onclick="lbNav(1); event.stopPropagation();"
+        class="absolute right-14 top-1/2 -translate-y-1/2 z-10 p-3 text-white/60 hover:text-white transition-colors hidden"
+        aria-label="Next photo">
+        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+        </svg>
+    </button>
+    <!-- Counter -->
+    <div id="lightbox-counter" class="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/50 text-sm hidden select-none"></div>
+    <!-- Photo -->
+    <img id="lightbox-img" src="" alt="Inspection photo" class="max-w-[95vw] max-h-[90vh] object-contain rounded-lg shadow-2xl" />
+</div>
+
+<!-- ─── Hidden file input for photo capture ─────────────────────── -->
+<input type="file" id="photo-capture-input" accept="image/*" capture="environment" class="hidden" />
+<!-- ─── Dedicated file input for rapid shoot (separate to avoid HTMX conflicts) ─── -->
+<input type="file" id="rapid-shoot-input" accept="image/*" capture="environment" class="hidden" />
+
+<script src="/static/js/inspection-offline.js?v=1"></script>
+<script src="/static/js/inspection_sync.js?v=1"></script>
+<script>
+// Initialize offline storage + sync engine for this inspection
+initInspectionOffline().then(async () => {
+    console.log('[Inspection] Offline storage ready for inspection {{.Inspection.ID}}');
+
+    // Create/find draft for this server-side inspection (enables offline edits)
+    let draft = await getInspectionDraftByServerId({{.Inspection.ID}});
+    if (!draft) {
+        draft = await createInspectionDraft({
+            serverId: {{.Inspection.ID}},
+            propertyId: 0,
+            propertyName: '{{.Inspection.PropertyName}}',
+            inspectorName: '{{.Inspection.InspectorName}}',
+        });
+        // Mark as synced since it already exists on server
+        await markDraftSynced(draft.localId, {{.Inspection.ID}});
+    }
+    window._currentDraftLocalId = draft.localId;
+});
+
+// ─── Lightbox with swipe + gallery navigation ───────────────────
+var _lbPhotos = [];
+var _lbIndex = 0;
+var _lbTouchX = 0;
+
+function openLightbox(photoId, galleryId) {
+    // Build photo list from the item's gallery so we can navigate
+    if (galleryId) {
+        var gallery = document.getElementById(galleryId);
+        if (gallery) {
+            var btns = gallery.querySelectorAll('[data-photo-id]');
+            _lbPhotos = Array.from(btns).map(function(b) { return parseInt(b.dataset.photoId); });
+            _lbIndex = _lbPhotos.indexOf(photoId);
+            if (_lbIndex < 0) _lbIndex = 0;
+        } else {
+            _lbPhotos = [photoId]; _lbIndex = 0;
+        }
+    } else {
+        _lbPhotos = [photoId]; _lbIndex = 0;
+    }
+    document.getElementById('photo-lightbox').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    _lbRender();
+}
+
+function _lbRender() {
+    document.getElementById('lightbox-img').src = '/api/inspections/photos/' + _lbPhotos[_lbIndex];
+    var multi = _lbPhotos.length > 1;
+    var counter = document.getElementById('lightbox-counter');
+    var prev = document.getElementById('lightbox-prev');
+    var next = document.getElementById('lightbox-next');
+    counter.textContent = (_lbIndex + 1) + ' / ' + _lbPhotos.length;
+    counter.classList.toggle('hidden', !multi);
+    prev.classList.toggle('hidden', !multi || _lbIndex === 0);
+    next.classList.toggle('hidden', !multi || _lbIndex === _lbPhotos.length - 1);
+}
+
+function lbNav(dir) {
+    var n = _lbIndex + dir;
+    if (n >= 0 && n < _lbPhotos.length) { _lbIndex = n; _lbRender(); }
+}
+
+function closeLightbox(e) {
+    if (e && e.target !== e.currentTarget && e.target.id !== 'photo-lightbox') return;
+    document.getElementById('photo-lightbox').classList.add('hidden');
+    document.body.style.overflow = '';
+    document.getElementById('lightbox-img').src = '';
+    _lbPhotos = []; _lbIndex = 0;
+}
+
+// Keyboard: Escape closes, arrows navigate
+document.addEventListener('keydown', function(e) {
+    if (document.getElementById('photo-lightbox').classList.contains('hidden')) return;
+    if (e.key === 'Escape') closeLightbox();
+    if (e.key === 'ArrowLeft') lbNav(-1);
+    if (e.key === 'ArrowRight') lbNav(1);
+});
+
+// Touch swipe on lightbox
+(function() {
+    var lb = document.getElementById('photo-lightbox');
+    lb.addEventListener('touchstart', function(e) {
+        _lbTouchX = e.touches[0].clientX;
+    }, { passive: true });
+    lb.addEventListener('touchend', function(e) {
+        var dx = e.changedTouches[0].clientX - _lbTouchX;
+        if (Math.abs(dx) > 50) lbNav(dx < 0 ? 1 : -1);
+    }, { passive: true });
+})();
+
+// ─── Photo Capture + Upload ─────────────────────────────────────
+let _captureInspectionId = 0;
+let _captureItemId = 0;
+let _captureIsAdhoc = false;
+
+function openPhotoCapture(inspectionId, itemId, isAdhoc) {
+    _captureInspectionId = inspectionId;
+    _captureItemId = itemId;
+    _captureIsAdhoc = isAdhoc;
+    document.getElementById('photo-capture-input').click();
+}
+
+document.getElementById('photo-capture-input').addEventListener('change', async function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const itemPrefix = _captureIsAdhoc ? 'adhoc' : 'item';
+    const itemEl = document.getElementById(itemPrefix + '-' + _captureItemId);
+
+    // Show uploading indicator on the item
+    if (itemEl) {
+        const indicator = document.createElement('div');
+        indicator.id = 'upload-indicator-' + _captureItemId;
+        indicator.className = 'mt-2 text-xs text-duke-teal flex items-center gap-1.5';
+        indicator.innerHTML = '<svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg> Uploading photo...';
+        itemEl.appendChild(indicator);
+    }
+
+    // Use offline-capable upload from inspection_sync.js
+    if (typeof uploadInspectionPhotoOffline === 'function') {
+        const data = await uploadInspectionPhotoOffline(
+            _captureInspectionId, _captureItemId, _captureIsAdhoc, file
+        );
+
+        const indicator = document.getElementById('upload-indicator-' + _captureItemId);
+        if (indicator) indicator.remove();
+
+        // If direct upload succeeded, show the thumbnail
+        if (data && data.id) {
+            if (itemEl) {
+                let strip = itemEl.querySelector('.photo-strip');
+                if (!strip) {
+                    strip = document.createElement('div');
+                    strip.className = 'photo-strip flex gap-2 mt-2 overflow-x-auto pb-1 -mx-1 px-1';
+                    const btnRow = itemEl.querySelector('.flex.items-center.gap-2.mt-2\\.5');
+                    if (btnRow) {
+                        itemEl.insertBefore(strip, btnRow);
+                    } else {
+                        itemEl.appendChild(strip);
+                    }
+                }
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.onclick = function() { openLightbox(data.id); };
+                btn.className = 'flex-shrink-0 rounded-lg overflow-hidden border border-gray-200 hover:border-duke-teal transition-colors focus:outline-none focus:ring-2 focus:ring-duke-teal/50';
+                btn.innerHTML = '<img src="' + (data.thumb_url || '/api/inspections/photos/' + data.id + '/thumb') + '" alt="Photo" loading="lazy" class="w-16 h-16 object-cover" />';
+                strip.appendChild(btn);
+            }
+        }
+        // If null returned, photo was queued offline (UI already updated by sync engine)
+    } else {
+        // Fallback: direct upload without offline support
+        const formData = new FormData();
+        formData.append('file', file);
+        if (_captureIsAdhoc) {
+            formData.append('adhoc_item_id', _captureItemId);
+        } else {
+            formData.append('item_id', _captureItemId);
+        }
+
+        try {
+            const resp = await fetch('/api/inspections/' + _captureInspectionId + '/photos', {
+                method: 'POST',
+                body: formData
+            });
+
+            const indicator = document.getElementById('upload-indicator-' + _captureItemId);
+            if (resp.ok) {
+                const data = await resp.json();
+                if (indicator) indicator.remove();
+                if (itemEl) {
+                    let strip = itemEl.querySelector('.photo-strip');
+                    if (!strip) {
+                        strip = document.createElement('div');
+                        strip.className = 'photo-strip flex gap-2 mt-2 overflow-x-auto pb-1 -mx-1 px-1';
+                        itemEl.appendChild(strip);
+                    }
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.onclick = function() { openLightbox(data.id); };
+                    btn.className = 'flex-shrink-0 rounded-lg overflow-hidden border border-gray-200 hover:border-duke-teal';
+                    btn.innerHTML = '<img src="' + data.thumb_url + '" alt="Photo" class="w-16 h-16 object-cover" />';
+                    strip.appendChild(btn);
+                }
+            } else {
+                if (indicator) {
+                    indicator.innerHTML = '<span class="text-red-500">Upload failed</span>';
+                    setTimeout(() => indicator.remove(), 3000);
+                }
+            }
+        } catch (err) {
+            console.error('Photo upload failed:', err);
+            const indicator = document.getElementById('upload-indicator-' + _captureItemId);
+            if (indicator) {
+                indicator.innerHTML = '<span class="text-red-500">Upload failed — check connection</span>';
+                setTimeout(() => indicator.remove(), 3000);
+            }
+        }
+    }
+
+    // Reset input so same file can be re-selected
+    this.value = '';
+});
+
+// ─── Offline Sync Status UI ─────────────────────────────────────
+// Drives the sync panel, header indicators, and connection status
+// Uses functions from inspection-offline.js (getSyncQueueStatus, etc.)
+(function() {
+    var syncPanel = document.getElementById('inspection-sync-panel');
+    var statusBar = document.getElementById('sync-status-bar');
+    var statusDot = document.getElementById('sync-status-dot');
+    var statusText = document.getElementById('sync-status-text');
+    var pendingCountEl = document.getElementById('sync-pending-count');
+    var toggleBtn = document.getElementById('sync-toggle-btn');
+    var syncDetails = document.getElementById('sync-details');
+    var syncItemsList = document.getElementById('sync-items-list');
+    var syncEmpty = document.getElementById('sync-empty-state');
+    var retryAllBtn = document.getElementById('sync-retry-all-btn');
+    var headerDot = document.getElementById('header-online-dot');
+    var headerBadge = document.getElementById('header-sync-badge');
+    var _detailsOpen = false;
+
+    // --- Connection status styles ---
+    function setConnectionUI(state) {
+        // state: 'online', 'offline', 'syncing', 'error'
+        var styles = {
+            online: {
+                bar: 'flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-300 bg-green-50 text-green-700 border border-green-200',
+                dot: 'w-2 h-2 rounded-full bg-green-500 flex-shrink-0',
+                hdot: 'inline-block w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0',
+                text: 'Online',
+                title: 'Online'
+            },
+            offline: {
+                bar: 'flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-300 bg-red-50 text-red-700 border border-red-200',
+                dot: 'w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0',
+                hdot: 'inline-block w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse flex-shrink-0',
+                text: 'Offline — changes saved locally',
+                title: 'Offline'
+            },
+            syncing: {
+                bar: 'flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-300 bg-amber-50 text-amber-700 border border-amber-200',
+                dot: 'w-2 h-2 rounded-full bg-amber-500 flex-shrink-0',
+                hdot: 'inline-block w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0',
+                text: 'Syncing...',
+                title: 'Syncing'
+            },
+            error: {
+                bar: 'flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-300 bg-red-50 text-red-700 border border-red-200',
+                dot: 'w-2 h-2 rounded-full bg-red-500 flex-shrink-0',
+                hdot: 'inline-block w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0',
+                text: 'Sync errors — tap to view',
+                title: 'Sync Error'
+            }
+        };
+        var s = styles[state] || styles.online;
+        statusBar.className = s.bar;
+        statusDot.className = s.dot;
+        statusText.textContent = s.text;
+        headerDot.className = s.hdot;
+        headerDot.title = s.title;
+    }
+
+    // --- Refresh all sync UI from IndexedDB state ---
+    async function refreshSyncUI() {
+        if (typeof getSyncQueueStatus !== 'function') return;
+
+        try {
+            var status = await getSyncQueueStatus();
+            var totalPending = status.pendingDrafts + status.pendingPhotos + status.uploadingPhotos;
+            var totalErrors = status.errorDrafts + status.errorPhotos;
+            var totalActive = totalPending + totalErrors;
+
+            // Determine connection state
+            var isOnline = navigator.onLine;
+            if (!isOnline) {
+                setConnectionUI('offline');
+            } else if (totalErrors > 0) {
+                setConnectionUI('error');
+                statusText.textContent = totalErrors + ' sync error' + (totalErrors !== 1 ? 's' : '') + ' — tap to view';
+            } else if (totalPending > 0) {
+                setConnectionUI('syncing');
+                statusText.textContent = 'Syncing ' + totalPending + ' item' + (totalPending !== 1 ? 's' : '') + '...';
+            } else {
+                setConnectionUI('online');
+            }
+
+            // Show/hide sync panel
+            if (totalActive > 0 || !isOnline) {
+                syncPanel.classList.remove('hidden');
+            } else {
+                // Brief delay before hiding (avoid flicker)
+                setTimeout(function() {
+                    if (syncPanel) syncPanel.classList.add('hidden');
+                }, 1000);
+            }
+
+            // Update count badges
+            if (totalActive > 0) {
+                pendingCountEl.textContent = totalActive;
+                pendingCountEl.classList.remove('hidden');
+                toggleBtn.classList.remove('hidden');
+                headerBadge.textContent = totalActive;
+                headerBadge.classList.remove('hidden');
+            } else {
+                pendingCountEl.classList.add('hidden');
+                toggleBtn.classList.add('hidden');
+                headerBadge.classList.add('hidden');
+            }
+
+            // Show/hide retry all button
+            if (totalErrors > 0) {
+                retryAllBtn.classList.remove('hidden');
+            } else {
+                retryAllBtn.classList.add('hidden');
+            }
+
+            // Update global banner pending count
+            if (window.dukecamUpdatePendingCount) window.dukecamUpdatePendingCount();
+
+            // Render detail items if panel is expanded
+            if (_detailsOpen) {
+                await renderSyncDetailItems(status);
+            }
+        } catch(e) {
+            console.warn('[SyncUI] Error refreshing:', e);
+        }
+    }
+
+    // --- Render detailed sync items in expandable panel ---
+    async function renderSyncDetailItems(status) {
+        // Clear existing items (keep empty state element)
+        syncItemsList.querySelectorAll('[data-sync-row]').forEach(function(el) { el.remove(); });
+
+        var hasItems = false;
+
+        // Show pending drafts
+        if (status.pendingDrafts > 0) {
+            hasItems = true;
+            appendSyncRow('checklist', status.pendingDrafts + ' checklist update' + (status.pendingDrafts !== 1 ? 's' : ''), 'pending');
+        }
+
+        // Show uploading photos
+        if (status.uploadingPhotos > 0) {
+            hasItems = true;
+            appendSyncRow('photo', status.uploadingPhotos + ' photo' + (status.uploadingPhotos !== 1 ? 's' : '') + ' uploading', 'uploading');
+        }
+
+        // Show pending photos
+        if (status.pendingPhotos > 0) {
+            hasItems = true;
+            appendSyncRow('photo', status.pendingPhotos + ' photo' + (status.pendingPhotos !== 1 ? 's' : '') + ' queued', 'pending');
+        }
+
+        // Show error drafts
+        if (status.errorDrafts > 0) {
+            hasItems = true;
+            appendSyncRow('error', status.errorDrafts + ' checklist sync failed', 'error');
+        }
+
+        // Show error photos
+        if (status.errorPhotos > 0) {
+            hasItems = true;
+            appendSyncRow('error', status.errorPhotos + ' photo upload' + (status.errorPhotos !== 1 ? 's' : '') + ' failed', 'error');
+        }
+
+        syncEmpty.classList.toggle('hidden', hasItems);
+    }
+
+    function appendSyncRow(type, label, state) {
+        var row = document.createElement('div');
+        row.setAttribute('data-sync-row', '1');
+        row.className = 'px-3 py-2 flex items-center gap-2';
+
+        var icon = '';
+        var statusIcon = '';
+
+        // Type icon
+        if (type === 'checklist') {
+            icon = '<svg class="w-4 h-4 text-duke-teal flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>';
+        } else if (type === 'photo') {
+            icon = '<svg class="w-4 h-4 text-duke-teal flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>';
+        } else {
+            icon = '<svg class="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+        }
+
+        // State indicator
+        if (state === 'uploading') {
+            statusIcon = '<svg class="w-3.5 h-3.5 text-duke-teal animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>';
+        } else if (state === 'pending') {
+            statusIcon = '<svg class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+        } else if (state === 'error') {
+            statusIcon = '<span class="text-[10px] font-semibold text-red-600">FAILED</span>';
+        }
+
+        row.innerHTML = icon + '<span class="text-xs text-gray-600 flex-1">' + label + '</span>' + statusIcon;
+        syncItemsList.appendChild(row);
+    }
+
+    // --- Toggle details panel ---
+    window.toggleSyncDetails = function() {
+        _detailsOpen = !_detailsOpen;
+        syncDetails.classList.toggle('hidden', !_detailsOpen);
+        document.getElementById('sync-chevron').style.transform = _detailsOpen ? 'rotate(180deg)' : '';
+        if (_detailsOpen) refreshSyncUI();
+    };
+
+    // --- Retry all failed items ---
+    window.retrySyncAll = async function() {
+        if (typeof getFailedPhotos !== 'function') return;
+        try {
+            var failedPhotos = await getFailedPhotos();
+            for (var i = 0; i < failedPhotos.length; i++) {
+                await retryPhoto(failedPhotos[i].id);
+            }
+            // Also retry failed drafts
+            var allDrafts = await listInspectionDrafts('error');
+            for (var j = 0; j < allDrafts.length; j++) {
+                await updateInspectionDraft(allDrafts[j].localId, { syncStatus: 'pending' });
+            }
+            refreshSyncUI();
+            // Trigger the background sync processor
+            if (typeof triggerSync === 'function') triggerSync();
+        } catch(e) {
+            console.error('[SyncUI] Retry all failed:', e);
+        }
+    };
+
+    // --- Event listeners ---
+    window.addEventListener('dukecam:offline', refreshSyncUI);
+    window.addEventListener('dukecam:online', function() {
+        refreshSyncUI();
+        // Trigger background sync on reconnection
+        if (typeof triggerSync === 'function') triggerSync();
+    });
+    window.addEventListener('online', function() {
+        refreshSyncUI();
+        if (typeof triggerSync === 'function') triggerSync();
+    });
+    window.addEventListener('offline', refreshSyncUI);
+
+    // Refresh periodically (every 3s while page is visible)
+    var _refreshTimer = setInterval(function() {
+        if (document.visibilityState === 'visible') refreshSyncUI();
+    }, 3000);
+
+    // Initial refresh after offline storage is ready
+    if (typeof initInspectionOffline === 'function') {
+        // Already called above; just refresh UI after a short delay
+        setTimeout(refreshSyncUI, 500);
+    }
+
+    // Cleanup
+    window.addEventListener('beforeunload', function() {
+        clearInterval(_refreshTimer);
+    });
+})();
+
+// ─── Rapid Shoot ────────────────────────────────────────────────
+// Keeps the camera open between shots so the inspector can take
+// a burst of photos without returning to the checklist each time.
+var _rs = null;
+
+function startRapidShoot(inspectionId, itemId, isAdhoc) {
+    if (_rs && _rs.active) stopRapidShoot();
+    _rs = { inspectionId: inspectionId, itemId: itemId, isAdhoc: isAdhoc, count: 0, uploading: 0, active: true };
+    document.getElementById('rapid-shoot-bar').classList.remove('hidden');
+    _rsUpdateUI();
+    _rsTriggerCapture();
+}
+
+function _rsTriggerCapture() {
+    if (!_rs || !_rs.active) return;
+    var input = document.getElementById('rapid-shoot-input');
+    input.value = '';
+    input.click();
+}
+
+document.getElementById('rapid-shoot-input').addEventListener('change', function(e) {
+    var file = e.target.files[0];
+    if (!file || !_rs || !_rs.active) return;
+
+    _rs.count++;
+    _rs.uploading++;
+    _rsUpdateUI();
+
+    // Upload in background via fetch (not HTMX — avoids swapping the gallery mid-session)
+    var formData = new FormData();
+    formData.append('photo', file);
+    var url = _rs.isAdhoc
+        ? '/api/inspections/' + _rs.inspectionId + '/adhoc/' + _rs.itemId + '/photo'
+        : '/api/inspections/' + _rs.inspectionId + '/item/' + _rs.itemId + '/photo';
+
+    fetch(url, { method: 'POST', body: formData })
+        .then(function() { if (_rs) { _rs.uploading--; _rsUpdateUI(); } })
+        .catch(function() { if (_rs) { _rs.uploading--; _rsUpdateUI(); } });
+
+    // Reopen camera for next shot
+    setTimeout(_rsTriggerCapture, 150);
+});
+
+function _rsUpdateUI() {
+    if (!_rs) return;
+    var countEl = document.getElementById('rapid-shoot-count');
+    var uploadEl = document.getElementById('rapid-shoot-uploading');
+    if (countEl) countEl.textContent = _rs.count + ' photo' + (_rs.count !== 1 ? 's' : '') + ' taken';
+    if (uploadEl) uploadEl.textContent = _rs.uploading > 0 ? '· syncing ' + _rs.uploading + '...' : '';
+}
+
+function stopRapidShoot() {
+    if (!_rs) return;
+    var session = _rs;
+    _rs = null;
+
+    document.getElementById('rapid-shoot-bar').classList.add('hidden');
+    document.getElementById('rapid-shoot-input').value = '';
+
+    // Refresh the gallery for this item once all uploads settle
+    if (session.count > 0) {
+        var galleryId = session.isAdhoc ? 'photos-adhoc-' + session.itemId : 'photos-' + session.itemId;
+        var galleryEl = document.getElementById(galleryId);
+        if (galleryEl) {
+            var galleryUrl = session.isAdhoc
+                ? '/api/inspections/' + session.inspectionId + '/adhoc/' + session.itemId + '/photos'
+                : '/api/inspections/' + session.inspectionId + '/item/' + session.itemId + '/photos';
+            htmx.ajax('GET', galleryUrl, { target: '#' + galleryId, swap: 'outerHTML' });
+        }
+    }
+}
+
+// Share link modal
+function generateShareLink(inspectionId) {
+    var btn = document.getElementById('share-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+
+    fetch('/api/inspections/' + inspectionId + '/share', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.url) throw new Error('no url');
+            _showShareModal(data.url);
+        })
+        .catch(function() {
+            alert('Could not generate share link. Please try again.');
+        })
+        .finally(function() {
+            if (btn) { btn.disabled = false; btn.textContent = 'Share Link'; }
+        });
+}
+
+function _showShareModal(url) {
+    // Remove any existing modal
+    var old = document.getElementById('share-modal');
+    if (old) old.remove();
+
+    var modal = document.createElement('div');
+    modal.id = 'share-modal';
+    modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4';
+    modal.innerHTML = [
+        '<div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5">',
+        '  <div class="flex items-center justify-between mb-3">',
+        '    <h3 class="text-sm font-bold text-duke-dark">Share Inspection</h3>',
+        '    <button onclick="document.getElementById(\'share-modal\').remove()" class="text-gray-400 hover:text-gray-600 p-1">',
+        '      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>',
+        '    </button>',
+        '  </div>',
+        '  <p class="text-xs text-gray-500 mb-3">Anyone with this link can view the inspection (read-only, no login required).</p>',
+        '  <div class="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2 mb-4">',
+        '    <span id="share-url-text" class="flex-1 text-xs text-gray-700 truncate">' + url + '</span>',
+        '  </div>',
+        '  <button id="share-copy-btn" onclick="_copyShareUrl(\'' + url + '\')" class="w-full py-2.5 rounded-xl bg-duke-teal text-white text-sm font-semibold active:opacity-80 transition">',
+        '    Copy Link',
+        '  </button>',
+        '</div>'
+    ].join('');
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) modal.remove();
+    });
+    document.body.appendChild(modal);
+}
+
+function _copyShareUrl(url) {
+    navigator.clipboard.writeText(url).then(function() {
+        var btn = document.getElementById('share-copy-btn');
+        if (btn) { btn.textContent = '✓ Copied!'; setTimeout(function() { btn.textContent = 'Copy Link'; }, 2000); }
+    }).catch(function() {
+        // Fallback for older browsers
+        var ta = document.createElement('textarea');
+        ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        var btn = document.getElementById('share-copy-btn');
+        if (btn) { btn.textContent = '✓ Copied!'; setTimeout(function() { btn.textContent = 'Copy Link'; }, 2000); }
+    });
+}
+</script>
+{{end}}

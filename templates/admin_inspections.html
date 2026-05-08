@@ -1,0 +1,53 @@
+{{define "title"}}Inspection Templates — DukeCam{{end}}
+{{define "header_right"}}<a href="/admin" class="text-duke-light hover:text-white transition-colors">← Admin</a>{{end}}
+
+{{define "content"}}
+<div class="max-w-4xl mx-auto p-4 space-y-6">
+
+    <!-- Page Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-duke-dark">🔍 Inspection Templates</h1>
+            <p class="text-sm text-gray-500 mt-1">Create checklists for property inspections</p>
+        </div>
+    </div>
+
+    <!-- Create Template Form -->
+    <div class="bg-white rounded-xl p-5 shadow-sm">
+        <h2 class="text-base font-bold text-duke-dark mb-3">New Template</h2>
+        <form hx-post="/api/admin/inspection-template" hx-target="#template-list" hx-swap="beforeend"
+              hx-on::after-request="if(event.detail.successful) this.reset()"
+              class="flex flex-wrap gap-2">
+            <input name="name" placeholder="Template name (e.g., Move-In Inspection)" required
+                   class="flex-1 min-w-[200px] px-3 py-2.5 border-2 border-gray-200 rounded-lg text-base focus:border-duke-teal focus:outline-none">
+            <input name="description" placeholder="Description (optional)"
+                   class="flex-1 min-w-[150px] px-3 py-2.5 border-2 border-gray-200 rounded-lg text-base focus:border-duke-teal focus:outline-none">
+            <button type="submit"
+                    class="px-5 py-2.5 bg-duke-teal text-white rounded-lg font-semibold hover:bg-duke-dark transition-colors whitespace-nowrap">
+                + Create Template
+            </button>
+        </form>
+    </div>
+
+    <!-- Template List -->
+    <div class="bg-white rounded-xl p-5 shadow-sm">
+        <h2 class="text-base font-bold text-duke-dark mb-3">Templates</h2>
+        {{template "inspection-template-list" .}}
+    </div>
+
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+// Confirmation for destructive actions
+document.body.addEventListener('htmx:confirm', function(e) {
+    if (e.detail.elt.dataset.confirm) {
+        e.preventDefault();
+        if (confirm(e.detail.elt.dataset.confirm)) {
+            e.detail.issueRequest();
+        }
+    }
+});
+</script>
+{{end}}

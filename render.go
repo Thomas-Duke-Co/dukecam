@@ -77,7 +77,7 @@ func NewRenderer() *Renderer {
 	r := &Renderer{templates: make(map[string]*template.Template)}
 
 	// Pages that don't need fragments
-	for _, page := range []string{"home", "project", "share"} {
+	for _, page := range []string{"home", "project", "share", "offline"} {
 		t := template.Must(
 			template.New("").Funcs(funcMap).ParseFiles(
 				"templates/base.html",
@@ -96,9 +96,55 @@ func NewRenderer() *Renderer {
 		),
 	)
 
+	// Inspection admin pages (need inspection fragments)
+	r.templates["admin_inspections"] = template.Must(
+		template.New("").Funcs(funcMap).ParseFiles(
+			"templates/base.html",
+			"templates/admin_inspections.html",
+			"templates/inspection_fragments.html",
+		),
+	)
+	r.templates["admin_inspection_detail"] = template.Must(
+		template.New("").Funcs(funcMap).ParseFiles(
+			"templates/base.html",
+			"templates/admin_inspection_detail.html",
+			"templates/inspection_fragments.html",
+		),
+	)
+
+	// New inspection wizard (template + property + inspector selection)
+	r.templates["inspection_new"] = template.Must(
+		template.New("").Funcs(funcMap).ParseFiles(
+			"templates/base.html",
+			"templates/inspection_new.html",
+			"templates/inspection_fragments.html",
+		),
+	)
+
+	// Inspection conduct page (live checklist with pass/fail/needs-attention)
+	r.templates["inspection_conduct"] = template.Must(
+		template.New("").Funcs(funcMap).ParseFiles(
+			"templates/base.html",
+			"templates/inspection_conduct.html",
+		),
+	)
+
+	// Inspection share page (public read-only view)
+	r.templates["inspection_share"] = template.Must(
+		template.New("").Funcs(funcMap).ParseFiles(
+			"templates/base.html",
+			"templates/inspection_share.html",
+		),
+	)
+
 	// Fragment templates for HTMX partial responses
 	r.templates["fragments"] = template.Must(
 		template.New("").Funcs(funcMap).ParseFiles("templates/fragments.html"),
+	)
+
+	// Inspection fragment templates for HTMX partial responses
+	r.templates["inspection_fragments"] = template.Must(
+		template.New("").Funcs(funcMap).ParseFiles("templates/inspection_fragments.html"),
 	)
 
 	return r
@@ -113,10 +159,19 @@ func (r *Renderer) Render(w io.Writer, name string, data interface{}, c echo.Con
 }
 
 // RenderFragment renders a named fragment template (for HTMX responses).
+// It checks both the main fragments and inspection fragments.
 func (r *Renderer) RenderFragment(w io.Writer, name string, data interface{}) error {
-	tmpl, ok := r.templates["fragments"]
-	if !ok {
-		return fmt.Errorf("fragments template not found")
+	// Try main fragments first
+	if tmpl, ok := r.templates["fragments"]; ok {
+		if t := tmpl.Lookup(name); t != nil {
+			return t.Execute(w, data)
+		}
 	}
-	return tmpl.ExecuteTemplate(w, name, data)
+	// Try inspection fragments
+	if tmpl, ok := r.templates["inspection_fragments"]; ok {
+		if t := tmpl.Lookup(name); t != nil {
+			return t.Execute(w, data)
+		}
+	}
+	return fmt.Errorf("fragment %q not found", name)
 }

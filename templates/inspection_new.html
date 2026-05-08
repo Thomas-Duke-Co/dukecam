@@ -1,0 +1,566 @@
+{{define "title"}}New Inspection — DukeCam{{end}}
+
+{{define "header_right"}}<a href="/?tab=inspections" class="text-duke-light hover:text-white transition-colors">← Back</a>{{end}}
+
+{{define "content"}}
+<!-- Step indicator -->
+<div class="bg-white border-b border-gray-200 px-4 py-3">
+    <div class="flex items-center gap-2 text-sm">
+        <span id="step-indicator-template" class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-duke-teal text-white text-xs font-bold">1</span>
+        <span id="step-label-template" class="font-semibold text-duke-dark">Choose Template</span>
+        <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        <span id="step-indicator-property" class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-200 text-gray-400 text-xs font-bold">2</span>
+        <span id="step-label-property" class="text-gray-400">Property</span>
+        <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        <span id="step-indicator-start" class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-200 text-gray-400 text-xs font-bold">3</span>
+        <span id="step-label-start" class="text-gray-400">Start</span>
+    </div>
+</div>
+
+<!-- Step 1: Template Selection -->
+<div id="step-template" class="px-4 py-5">
+    <h2 class="text-lg font-bold text-duke-dark mb-1">What type of inspection?</h2>
+    <p class="text-sm text-gray-500 mb-4">Choose a template or start blank</p>
+
+    <!-- Blank inspection option -->
+    <button onclick="selectTemplate(0, 'Blank Inspection')"
+            id="template-card-0"
+            class="w-full text-left bg-white border-2 border-dashed border-gray-300 rounded-xl p-4 mb-3 hover:border-duke-teal hover:bg-duke-teal/5 transition-all active:scale-[0.98]">
+        <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                </svg>
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="font-semibold text-duke-dark">Blank Inspection</div>
+                <div class="text-xs text-gray-400">No checklist — just photos and notes</div>
+            </div>
+            <svg class="w-5 h-5 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        </div>
+    </button>
+
+    {{if .Templates}}
+    <!-- Template cards -->
+    <div class="space-y-3">
+        {{range .Templates}}
+        <div>
+            <button onclick="previewTemplate({{.ID}}, '{{.Name}}')"
+                    id="template-card-{{.ID}}"
+                    class="w-full text-left bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:border-duke-teal hover:shadow-md transition-all active:scale-[0.98]">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-lg bg-duke-teal/10 flex items-center justify-center flex-shrink-0">
+                        <svg class="w-6 h-6 text-duke-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                        </svg>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="font-semibold text-duke-dark">{{.Name}}</div>
+                        {{if .Description}}<div class="text-xs text-gray-500 truncate mt-0.5">{{deref .Description}}</div>{{end}}
+                        <div class="flex items-center gap-3 mt-1">
+                            <span class="text-xs text-gray-400">{{.CategoryCount}} categories</span>
+                            <span class="text-xs text-gray-400">{{.ItemCount}} items</span>
+                        </div>
+                    </div>
+                    <svg class="w-5 h-5 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </div>
+            </button>
+            <!-- Template preview panel (populated via HTMX when tapped) -->
+            <div id="template-preview-{{.ID}}" class="hidden mt-2 bg-white border border-duke-teal/30 rounded-xl p-4 shadow-sm">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-bold text-duke-dark">{{.Name}} — Preview</h3>
+                    <button onclick="collapseTemplatePreview({{.ID}})" class="text-xs text-gray-400 hover:text-gray-600">✕</button>
+                </div>
+                <div id="template-preview-content-{{.ID}}" class="text-xs text-gray-400 text-center py-2">
+                    <svg class="w-4 h-4 mx-auto animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+                    Loading...
+                </div>
+                <button onclick="selectTemplate({{.ID}}, '{{.Name}}')"
+                        class="w-full mt-3 py-2.5 bg-duke-teal hover:bg-duke-dark text-white text-sm font-bold rounded-lg transition-colors active:scale-95 flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                    Use This Template
+                </button>
+            </div>
+        </div>
+        {{end}}
+    </div>
+    {{else}}
+    <div class="text-center py-8 text-gray-400">
+        <p class="text-sm">No templates created yet.</p>
+        <p class="text-xs mt-1">An admin can create templates in <a href="/admin/inspections" class="text-duke-teal underline">Settings</a>.</p>
+    </div>
+    {{end}}
+</div>
+
+<!-- Step 2: Property Selection (loaded via HTMX) -->
+<div id="step-property" class="px-4 py-5 hidden">
+    <div class="flex items-center justify-between mb-4">
+        <div>
+            <h2 class="text-lg font-bold text-duke-dark mb-1">Select a property</h2>
+            <p class="text-sm text-gray-500">Using: <span id="selected-template-label" class="font-medium text-duke-dark"></span></p>
+        </div>
+        <button onclick="goBackToTemplates()" class="text-sm text-duke-teal font-semibold hover:underline">Change</button>
+    </div>
+
+    <!-- Property search -->
+    <div class="relative mb-4">
+        <input type="text" id="property-search"
+               placeholder="Search properties..."
+               class="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-duke-teal focus:ring-1 focus:ring-duke-teal"
+               hx-get="/api/inspections/properties/search"
+               hx-trigger="input changed delay:300ms, search"
+               hx-target="#property-list"
+               hx-include="this"
+               name="q"
+               autocomplete="off">
+        <svg class="absolute left-3 top-3.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+    </div>
+
+    <!-- Property list (populated via HTMX) -->
+    <div id="property-list" class="space-y-2">
+        <div class="text-center py-8 text-gray-400">
+            <div class="animate-pulse text-sm">Loading properties...</div>
+        </div>
+    </div>
+
+    <!-- Unit/Suite dropdown (appears after selecting a property) -->
+    <div id="unit-selection" class="hidden mt-4">
+        <div class="bg-duke-teal/5 border border-duke-teal/20 rounded-xl p-4">
+            <div class="flex items-center justify-between mb-2">
+                <div>
+                    <div class="text-sm font-semibold text-duke-dark" id="selected-property-label"></div>
+                    <div class="text-xs text-gray-400" id="selected-property-addr"></div>
+                </div>
+                <button onclick="clearPropertySelection()" class="text-xs text-duke-teal font-semibold hover:underline">Change</button>
+            </div>
+
+            <label class="block text-sm font-medium text-gray-700 mt-3 mb-1">Unit / Suite (optional)</label>
+            <select id="unit-dropdown"
+                    onchange="onUnitSelected()"
+                    class="w-full px-3 py-3 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-duke-teal focus:ring-1 focus:ring-duke-teal appearance-none"
+                    style="background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 20 20%22 fill=%22%239ca3af%22%3E%3Cpath fill-rule=%22evenodd%22 d=%22M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z%22 clip-rule=%22evenodd%22/%3E%3C/svg%3E'); background-position: right 0.75rem center; background-repeat: no-repeat; background-size: 1.25rem;">
+                <option value="">Loading units...</option>
+            </select>
+
+            <button onclick="confirmPropertyAndUnit()"
+                    class="w-full mt-3 py-3 bg-duke-teal hover:bg-duke-dark text-white font-semibold text-sm rounded-xl transition-colors active:scale-[0.98] flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                Continue
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Step 3: Confirm & Start (loaded via HTMX) -->
+<div id="step-start" class="px-4 py-5 hidden">
+    <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold text-duke-dark">Ready to inspect</h2>
+        <button onclick="goBackToProperty()" class="text-sm text-duke-teal font-semibold hover:underline">Change property</button>
+    </div>
+
+    <!-- Summary card -->
+    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm mb-4">
+        <div class="space-y-3">
+            <div>
+                <div class="text-xs text-gray-400 uppercase tracking-wide">Template</div>
+                <div class="font-semibold text-duke-dark" id="confirm-template"></div>
+            </div>
+            <div>
+                <div class="text-xs text-gray-400 uppercase tracking-wide">Property</div>
+                <div class="font-semibold text-duke-dark" id="confirm-property"></div>
+            </div>
+            <div>
+                <div class="text-xs text-gray-400 uppercase tracking-wide">Building / Unit</div>
+                <div class="font-semibold text-duke-dark" id="confirm-unit">—</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inspector Selection -->
+    <div class="mb-4">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Inspector</label>
+        {{template "inspector-picker" .}}
+    </div>
+
+    <!-- Inspector confirmation display (shown in summary after selection) -->
+    <div id="confirm-inspector-row" class="hidden bg-white border border-gray-200 rounded-xl p-4 shadow-sm mb-4">
+        <div class="text-xs text-gray-400 uppercase tracking-wide">Inspector</div>
+        <div class="font-semibold text-duke-dark" id="confirm-inspector-name"></div>
+        <div class="text-xs text-gray-500" id="confirm-inspector-email"></div>
+    </div>
+
+    <!-- Optional notes -->
+    <div class="mb-6">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
+        <textarea id="inspection-notes" rows="2" placeholder="e.g. Annual walkthrough, pre-lease, etc."
+                  class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-duke-teal focus:ring-1 focus:ring-duke-teal resize-none"></textarea>
+    </div>
+
+    <!-- Start button -->
+    <form id="start-inspection-form"
+          hx-post="/api/inspections/create"
+          hx-target="body"
+          hx-push-url="true"
+          hx-indicator="#start-spinner">
+        <input type="hidden" name="template_id" id="form-template-id">
+        <input type="hidden" name="property_id" id="form-property-id">
+        <input type="hidden" name="property_name" id="form-property-name">
+        <input type="hidden" name="building_id" id="form-building-id">
+        <input type="hidden" name="unit_id" id="form-unit-id">
+        <input type="hidden" name="inspector_id" id="form-inspector-id">
+        <input type="hidden" name="inspector_name" id="form-inspector-name">
+        <input type="hidden" name="notes" id="form-notes">
+
+        <button type="submit"
+                class="w-full py-4 bg-duke-teal hover:bg-duke-dark text-white font-bold text-lg rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2 active:scale-[0.98]">
+            <svg id="start-spinner" class="htmx-indicator w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+            Start Inspection
+        </button>
+    </form>
+
+    <!-- Phase 2 integration hints -->
+    <div class="mt-6 border border-dashed border-gray-200 rounded-xl p-4 bg-gray-50/50">
+        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Coming in Phase 2</div>
+        <div class="space-y-2.5">
+            <div class="flex items-center gap-2.5 text-sm text-gray-400">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                <span>Shareable inspection report with PDF export</span>
+            </div>
+            <div class="flex items-center gap-2.5 text-sm text-gray-400">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                <span>Auto-sync results back to PropertyOS</span>
+            </div>
+            <div class="flex items-center gap-2.5 text-sm text-gray-400">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                <span>Create Fyxt work orders from failed items</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{template "inspection_new_scripts" .}}
+{{end}}
+
+{{define "inspection_new_scripts"}}
+<script src="/static/js/inspection-offline.js?v=1"></script>
+<script>
+// State
+var inspState = {
+    templateId: null,
+    templateName: '',
+    propertyId: null,
+    propertyName: '',
+    buildingId: null,
+    unitId: null,
+    unitLabel: ''
+};
+
+// Track which template previews have been loaded (avoid re-fetching)
+var _previewLoaded = {};
+
+// ─── Template Preview (shows sections/items before committing) ──
+
+function previewTemplate(id, name) {
+    // Collapse any other open preview panel (not content divs)
+    document.querySelectorAll('[id^="template-preview-"]').forEach(function(el) {
+        if (el.id !== 'template-preview-' + id && !el.id.includes('-content-')) {
+            el.classList.add('hidden');
+        }
+    });
+
+    // Highlight selected card
+    document.querySelectorAll('[id^="template-card-"]').forEach(function(el) {
+        el.classList.remove('border-duke-teal', 'ring-2', 'ring-duke-teal/30');
+    });
+    var card = document.getElementById('template-card-' + id);
+    if (card) {
+        card.classList.add('border-duke-teal', 'ring-2', 'ring-duke-teal/30');
+    }
+
+    var previewPanel = document.getElementById('template-preview-' + id);
+    if (!previewPanel) {
+        // No preview panel (shouldn't happen) — fall through to select
+        selectTemplate(id, name);
+        return;
+    }
+
+    // Toggle preview panel visibility
+    var isHidden = previewPanel.classList.contains('hidden');
+    if (!isHidden) {
+        previewPanel.classList.add('hidden');
+        return;
+    }
+    previewPanel.classList.remove('hidden');
+
+    // Load preview content via HTMX (only once per template)
+    if (!_previewLoaded[id]) {
+        _previewLoaded[id] = true;
+        htmx.ajax('GET', '/api/inspections/templates/' + id + '/preview', {
+            target: '#template-preview-content-' + id,
+            swap: 'innerHTML'
+        });
+        // Also cache the template data in IndexedDB for offline use
+        cacheTemplateForOffline(id);
+    }
+
+    // Scroll preview into view on mobile
+    setTimeout(function() {
+        previewPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 100);
+}
+
+function collapseTemplatePreview(id) {
+    var previewPanel = document.getElementById('template-preview-' + id);
+    if (previewPanel) previewPanel.classList.add('hidden');
+    // Remove highlight from card
+    var card = document.getElementById('template-card-' + id);
+    if (card) card.classList.remove('border-duke-teal', 'ring-2', 'ring-duke-teal/30');
+}
+
+function selectTemplate(id, name) {
+    inspState.templateId = id;
+    inspState.templateName = name;
+
+    // Collapse any open preview panels (not content divs)
+    document.querySelectorAll('[id^="template-preview-"]').forEach(function(el) {
+        if (!el.id.includes('-content-')) el.classList.add('hidden');
+    });
+
+    // Highlight selected card
+    document.querySelectorAll('[id^="template-card-"]').forEach(function(el) {
+        el.classList.remove('border-duke-teal', 'ring-2', 'ring-duke-teal/30');
+    });
+    var card = document.getElementById('template-card-' + id);
+    if (card) {
+        card.classList.add('border-duke-teal', 'ring-2', 'ring-duke-teal/30');
+    }
+
+    // Cache the selected template for offline use (if not already cached)
+    if (id > 0) {
+        cacheTemplateForOffline(id);
+    }
+
+    // Update label
+    document.getElementById('selected-template-label').textContent = name;
+
+    // Advance to step 2
+    showStep('property');
+
+    // Load properties via HTMX
+    htmx.ajax('GET', '/api/inspections/properties/search', {target: '#property-list', swap: 'innerHTML'});
+}
+
+// ─── IndexedDB Template Cache (for offline new-inspection flow) ──
+
+async function cacheTemplateForOffline(templateId) {
+    try {
+        var resp = await fetch('/api/inspections/templates/' + templateId);
+        if (!resp.ok) return;
+        var tmplData = await resp.json();
+
+        // Store in IndexedDB via the inspection offline storage
+        if (typeof openInspectionDB === 'function') {
+            var db = await openInspectionDB();
+            if (db) {
+                // Use a simple key-value approach in the drafts store
+                // We store template data with a special localId prefix
+                var cacheKey = 'tmpl_cache_' + templateId;
+                var cached = {
+                    localId: cacheKey,
+                    serverId: null,
+                    templateId: templateId,
+                    templateName: tmplData.name || '',
+                    templateData: tmplData, // Full template with categories + items
+                    propertyId: 0,
+                    propertyName: '',
+                    inspectorName: '',
+                    status: 'template_cache',
+                    syncStatus: 'synced', // Never needs syncing
+                    responses: {},
+                    adhocItems: [],
+                    createdAt: Date.now(),
+                    updatedAt: Date.now(),
+                    completedAt: null,
+                    notes: null,
+                };
+                await idbPut(DRAFT_STORE, cached);
+                console.log('[Inspection] Template cached for offline: ' + tmplData.name + ' (id=' + templateId + ')');
+            }
+        }
+    } catch (err) {
+        // Non-fatal — template just won't be available offline
+        console.warn('[Inspection] Template cache failed:', err);
+    }
+}
+
+// Load cached template data from IndexedDB (used for offline preview)
+async function getCachedTemplate(templateId) {
+    try {
+        if (typeof idbGet === 'function') {
+            var cached = await idbGet(DRAFT_STORE, 'tmpl_cache_' + templateId);
+            if (cached && cached.templateData) {
+                return cached.templateData;
+            }
+        }
+    } catch (err) {
+        console.warn('[Inspection] Template cache read failed:', err);
+    }
+    return null;
+}
+
+function selectProperty(id, name, buildingId, unitId, addr) {
+    inspState.propertyId = id;
+    inspState.propertyName = name;
+    inspState.buildingId = buildingId || id;
+    inspState.unitId = null;
+    inspState.unitLabel = '—';
+
+    // Show the unit selection section
+    document.getElementById('unit-selection').classList.remove('hidden');
+    document.getElementById('selected-property-label').textContent = name;
+    document.getElementById('selected-property-addr').textContent = addr || '';
+
+    // Hide the property list and search
+    document.getElementById('property-list').classList.add('hidden');
+    document.getElementById('property-search').parentElement.classList.add('hidden');
+
+    // Fetch units via HTMX
+    var dropdown = document.getElementById('unit-dropdown');
+    dropdown.innerHTML = '<option value="">Loading units...</option>';
+    htmx.ajax('GET', '/api/inspections/properties/' + id + '/units', {target: '#unit-dropdown', swap: 'innerHTML'});
+}
+
+function clearPropertySelection() {
+    // Re-show search and property list, hide unit section
+    document.getElementById('unit-selection').classList.add('hidden');
+    document.getElementById('property-list').classList.remove('hidden');
+    document.getElementById('property-search').parentElement.classList.remove('hidden');
+    document.getElementById('property-search').focus();
+}
+
+function onUnitSelected() {
+    // Called when the unit dropdown changes — store selection
+    var dropdown = document.getElementById('unit-dropdown');
+    var selected = dropdown.options[dropdown.selectedIndex];
+    if (selected && selected.value && selected.value !== '0') {
+        inspState.unitId = parseInt(selected.value);
+        inspState.unitLabel = selected.textContent;
+    } else {
+        inspState.unitId = null;
+        inspState.unitLabel = selected ? selected.textContent : 'Entire Property';
+    }
+}
+
+function confirmPropertyAndUnit() {
+    // Capture unit selection
+    onUnitSelected();
+
+    // Fill confirm card
+    document.getElementById('confirm-template').textContent = inspState.templateName;
+    document.getElementById('confirm-property').textContent = inspState.propertyName;
+    document.getElementById('confirm-unit').textContent = inspState.unitLabel || 'Entire Property';
+
+    // Fill hidden form fields
+    document.getElementById('form-template-id').value = inspState.templateId;
+    document.getElementById('form-property-id').value = inspState.propertyId;
+    document.getElementById('form-property-name').value = inspState.propertyName;
+    document.getElementById('form-building-id').value = inspState.buildingId || '';
+    document.getElementById('form-unit-id').value = inspState.unitId || '';
+
+    // Advance to step 3
+    showStep('start');
+}
+
+function goBackToTemplates() {
+    showStep('template');
+}
+
+function goBackToProperty() {
+    // Reset unit selection UI
+    document.getElementById('unit-selection').classList.add('hidden');
+    document.getElementById('property-list').classList.remove('hidden');
+    document.getElementById('property-search').parentElement.classList.remove('hidden');
+    showStep('property');
+}
+
+function showStep(step) {
+    // Hide all steps
+    ['template', 'property', 'start'].forEach(function(s) {
+        document.getElementById('step-' + s).classList.add('hidden');
+    });
+    // Show active step
+    document.getElementById('step-' + step).classList.remove('hidden');
+
+    // Update step indicators
+    var steps = ['template', 'property', 'start'];
+    var activeIdx = steps.indexOf(step);
+
+    steps.forEach(function(s, idx) {
+        var indicator = document.getElementById('step-indicator-' + s);
+        var label = document.getElementById('step-label-' + s);
+
+        if (idx < activeIdx) {
+            // Completed step
+            indicator.className = 'inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-500 text-white text-xs font-bold';
+            indicator.innerHTML = '✓';
+            label.className = 'text-green-600 font-medium';
+        } else if (idx === activeIdx) {
+            // Active step
+            indicator.className = 'inline-flex items-center justify-center w-6 h-6 rounded-full bg-duke-teal text-white text-xs font-bold';
+            indicator.textContent = idx + 1;
+            label.className = 'font-semibold text-duke-dark';
+        } else {
+            // Future step
+            indicator.className = 'inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-200 text-gray-400 text-xs font-bold';
+            indicator.textContent = idx + 1;
+            label.className = 'text-gray-400';
+        }
+    });
+
+    // Focus search on property step
+    if (step === 'property') {
+        setTimeout(function() {
+            document.getElementById('property-search').focus();
+        }, 100);
+    }
+
+    // Sync notes before submitting
+    if (step === 'start') {
+        document.getElementById('inspection-notes').addEventListener('input', function() {
+            document.getElementById('form-notes').value = this.value;
+        });
+    }
+}
+
+// Handle form submission - sync notes + inspector identity
+document.getElementById('start-inspection-form').addEventListener('htmx:configRequest', function(e) {
+    e.detail.parameters.notes = document.getElementById('inspection-notes').value;
+    // Inspector fields from the picker hidden inputs
+    e.detail.parameters.inspector_id = document.getElementById('inspector-id-input').value;
+    e.detail.parameters.inspector_name = document.getElementById('inspector-name-input').value;
+});
+
+// Listen for inspector selection events to update confirm display
+document.addEventListener('inspector-selected', function(e) {
+    var detail = e.detail;
+    // Sync to form hidden fields
+    document.getElementById('form-inspector-id').value = detail.id;
+    document.getElementById('form-inspector-name').value = detail.name;
+    // Show confirmation row
+    document.getElementById('confirm-inspector-name').textContent = detail.name;
+    document.getElementById('confirm-inspector-email').textContent = detail.email || '';
+    document.getElementById('confirm-inspector-row').classList.remove('hidden');
+});
+document.addEventListener('inspector-cleared', function() {
+    document.getElementById('form-inspector-id').value = '';
+    document.getElementById('form-inspector-name').value = '';
+    document.getElementById('confirm-inspector-row').classList.add('hidden');
+});
+</script>
+{{end}}
