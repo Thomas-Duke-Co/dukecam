@@ -119,6 +119,7 @@ func (a *App) registerRoutes(e *echo.Echo) {
 	e.POST("/api/inspections/sync", a.BatchSyncHandler)         // JSON — offline sync batch (idempotent)
 	e.POST("/api/inspections/:id/item/:itemId/status", a.UpdateItemStatusHandler)
 	e.POST("/api/inspections/:id/complete", a.CompleteInspectionHandler)
+	e.POST("/api/inspections/:id/reopen", a.ReopenInspectionHandler)
 	e.POST("/api/inspections/:id/work-order", a.CreateFyxtWorkOrderHandler)
 
 	// Ad-hoc Items API (HTMX — add/update/delete items during inspection)

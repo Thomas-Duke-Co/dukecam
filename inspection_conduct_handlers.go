@@ -233,6 +233,25 @@ func (a *App) CompleteInspectionHandler(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
+// POST /api/inspections/:id/reopen — flips a completed inspection back to in_progress
+// so photos and items can be edited again.
+func (a *App) ReopenInspectionHandler(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid inspection id")
+	}
+
+	if _, err := a.db.ReopenInspection(ctx, id); err != nil {
+		log.Printf("reopen inspection error: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to reopen inspection")
+	}
+
+	c.Response().Header().Set("HX-Redirect", fmt.Sprintf("/inspection/%d", id))
+	return c.NoContent(http.StatusOK)
+}
+
 // ─── Submit Full Inspection (offline sync) ──────────────────────
 
 // POST /api/inspections/submit — accepts a complete inspection with all responses in one request.
