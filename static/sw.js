@@ -8,15 +8,18 @@
  * - Background Sync API for inspection data + photo uploads
  */
 
-const SW_VERSION = '2.0.0';
+const SW_VERSION = '2.1.0';
 const CACHE_NAME = `dukecam-v${SW_VERSION}`;
 
-// App shell — precached on install
+// App shell — precached on install. upload.js carries an explicit version
+// query so bumping SW_VERSION forces a fresh fetch (the previous version's
+// cache entry is keyed on the old query string and gets evicted with the
+// old CACHE_NAME on activate).
 const PRECACHE_URLS = [
     '/',
     '/static/js/tailwind.js',
     '/static/js/htmx.min.js',
-    '/static/js/upload.js',
+    '/static/js/upload.js?v=7',
     '/static/js/inspection-offline.js',
     '/static/js/inspection_sync.js',
     '/static/img/tduke-logo.png',

@@ -244,8 +244,13 @@ func main() {
 
 	e.Static("/static", "static")
 
-	// Service worker must be served from root for proper scope
+	// Service worker must be served from root for proper scope.
+	// Disable caching: a stale /sw.js at any edge means PWAs can't see
+	// new SW versions, which means they can't flush their precache.
 	e.GET("/sw.js", func(c echo.Context) error {
+		c.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		c.Response().Header().Set("Pragma", "no-cache")
+		c.Response().Header().Set("Expires", "0")
 		return c.File("static/sw.js")
 	})
 
