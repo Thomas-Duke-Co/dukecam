@@ -24,6 +24,94 @@ let dbAvailable = false;
 let activeUploads = 0;
 let isProcessing = false;
 
+// ─── Batch progress tracker ──────────────────────────────────────
+// Tracks per-batch counts (selected/queued/uploaded/failed) and renders
+// a sticky banner so users see live progress on 100+ photo batches.
+
+const batchTracker = (function() {
+    const batches = new Map();
+
+    function get(id) {
+        let b = batches.get(id);
+        if (!b) {
+            b = { id, total: 0, queued: 0, uploaded: 0, failed: 0 };
+            batches.set(id, b);
+        }
+        return b;
+    }
+
+    function render() {
+        const container = document.getElementById('upload-queue');
+        if (!container) return;
+        let banner = document.getElementById('batch-progress-banner');
+
+        // Aggregate across all active batches.
+        let total = 0, queued = 0, uploaded = 0, failed = 0;
+        for (const b of batches.values()) {
+            total += b.total;
+            queued += b.queued;
+            uploaded += b.uploaded;
+            failed += b.failed;
+        }
+
+        const pending = queued - uploaded - failed;
+        const done = total > 0 && (uploaded + failed >= total) && pending <= 0;
+
+        if (total === 0) {
+            if (banner) banner.remove();
+            return;
+        }
+
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'batch-progress-banner';
+            banner.style.cssText = 'position:sticky;top:0;z-index:50;background:#0f766e;color:#fff;padding:10px 14px;border-radius:10px;font-weight:600;font-size:14px;margin-bottom:8px;box-shadow:0 2px 8px rgba(0,0,0,.15);display:flex;align-items:center;gap:10px;';
+            container.style.display = 'block';
+            container.prepend(banner);
+        }
+
+        const processed = uploaded + failed;
+        const pctNum = total > 0 ? Math.round((processed / total) * 100) : 0;
+        const failedTxt = failed > 0 ? ` · <span style="color:#fecaca">${failed} failed</span>` : '';
+        const icon = done ? (failed > 0 ? '⚠️' : '✅') : '📤';
+        const label = done
+            ? (failed > 0 ? `Done with ${failed} failed of ${total}` : `Uploaded ${uploaded} of ${total}`)
+            : `Uploading ${uploaded} of ${total}${failedTxt}`;
+
+        banner.innerHTML = `
+            <span style="font-size:18px">${icon}</span>
+            <div style="flex:1">
+                <div>${label}</div>
+                <div style="height:6px;background:rgba(255,255,255,.25);border-radius:3px;margin-top:6px;overflow:hidden">
+                    <div style="height:100%;width:${pctNum}%;background:#fff;transition:width .3s"></div>
+                </div>
+            </div>
+            <span style="font-variant-numeric:tabular-nums;font-size:13px;opacity:.9">${pctNum}%</span>
+        `;
+
+        if (done) {
+            setTimeout(() => {
+                // Clear completed batches after a moment.
+                for (const [id, b] of batches) {
+                    if (b.uploaded + b.failed >= b.total) batches.delete(id);
+                }
+                render();
+            }, 4000);
+        }
+    }
+
+    return {
+        start(id, total) {
+            const b = get(id);
+            b.total += total;
+            render();
+        },
+        recordQueued(id) { if (id && batches.has(id)) { get(id).queued++; render(); } },
+        recordUploaded(id) { if (id && batches.has(id)) { get(id).uploaded++; render(); } },
+        recordFailed(id) { if (id && batches.has(id)) { get(id).failed++; render(); } },
+    };
+})();
+
 // ─── IndexedDB Setup ─────────────────────────────────────────────
 
 async function openDB() {
@@ -120,28 +208,40 @@ function dbGetPending() {
 // ─── Queue Management ────────────────────────────────────────────
 
 async function enqueueFiles(files, projectId, workerId, workerName, caption, tag) {
-    console.log(`[DukeCam] enqueueFiles: ${files.length} files, project=${projectId}, worker=${workerId || workerName || 'none'}, tag=${tag}`);
+    const total = files.length;
+    console.log(`[DukeCam] enqueueFiles: ${total} files, project=${projectId}, worker=${workerId || workerName || 'none'}, tag=${tag}`);
     const batchId = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString());
     let readFailures = 0;
+    let quotaFailures = 0;
+    let enqueued = 0;
 
-    for (const file of files) {
-        const sizeMB = (file.size / 1024 / 1024).toFixed(1);
-        console.log(`[DukeCam] Processing: ${file.name} (${sizeMB}MB, ${file.type || 'unknown type'})`);
+    batchTracker.start(batchId, total);
 
-        try {
-            const buffer = await file.arrayBuffer();
-            console.log(`[DukeCam] Read ${buffer.byteLength} bytes from ${file.name}`);
+    // Process in small chunks with yields to the event loop so iOS Safari
+    // doesn't kill the page on large batches (100+ photos).
+    const CHUNK = 8;
+    for (let i = 0; i < files.length; i += CHUNK) {
+        const slice = Array.from(files).slice(i, i + CHUNK);
 
-            if (buffer.byteLength === 0) {
-                console.warn(`[DukeCam] Empty buffer for ${file.name} — skipping (file may not be locally available)`);
+        for (const file of slice) {
+            const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+            console.log(`[DukeCam] Enqueue: ${file.name} (${sizeMB}MB, ${file.type || 'unknown type'})`);
+
+            if (!file || file.size === 0) {
+                console.warn(`[DukeCam] Empty/unreadable file ${file && file.name} — skipping`);
                 readFailures++;
+                batchTracker.recordFailed(batchId);
                 continue;
             }
 
             const item = {
                 id: `${batchId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                blob: buffer,
+                // Store the Blob/File directly. IndexedDB streams these from
+                // disk via structured clone — does NOT hold the full bytes in
+                // the JS heap, unlike ArrayBuffer.
+                blob: file,
                 fileName: file.name || `photo-${Date.now()}.jpg`,
+                fileSize: file.size,
                 mimeType: file.type || 'image/jpeg',
                 projectId,
                 workerId: workerId || null,
@@ -154,33 +254,53 @@ async function enqueueFiles(files, projectId, workerId, workerName, caption, tag
                 addedAt: Date.now(),
             };
 
-            if (dbAvailable) {
-                await dbPut(item);
-                console.log(`[DukeCam] Queued in IndexedDB: ${item.id}`);
-                renderQueueItem(item);
-            } else {
-                // Fallback: direct upload without queue
-                console.log(`[DukeCam] Direct upload (no IndexedDB): ${item.fileName}`);
-                renderQueueItem(item);
-                directUpload(item);
+            try {
+                if (dbAvailable) {
+                    await dbPut(item);
+                    renderQueueItem(item);
+                    enqueued++;
+                    batchTracker.recordQueued(batchId);
+                } else {
+                    // No IndexedDB: read into memory and upload directly.
+                    console.log(`[DukeCam] Direct upload (no IndexedDB): ${item.fileName}`);
+                    renderQueueItem(item);
+                    enqueued++;
+                    batchTracker.recordQueued(batchId);
+                    directUpload(item);
+                }
+            } catch (err) {
+                const name = (err && err.name) || '';
+                const msg = (err && err.message) || String(err);
+                console.error(`[DukeCam] Enqueue failed for ${file.name}: ${name} ${msg}`);
+                if (name === 'QuotaExceededError' || /quota/i.test(msg)) {
+                    quotaFailures++;
+                } else {
+                    readFailures++;
+                }
+                batchTracker.recordFailed(batchId);
             }
-        } catch (err) {
-            console.error(`[DukeCam] Failed to read file ${file.name}:`, err);
-            readFailures++;
         }
+
+        // Yield so the UI can repaint the counter and so iOS doesn't
+        // think the page is hung.
+        await new Promise(r => (window.requestAnimationFrame || setTimeout)(r, 0));
     }
 
+    if (quotaFailures > 0) {
+        showToast(`Storage full — ${quotaFailures} photo${quotaFailures > 1 ? 's' : ''} dropped. Upload current batch first, then add more.`, 'error');
+        console.warn(`[DukeCam] ${quotaFailures} file(s) dropped by IndexedDB quota`);
+    }
     if (readFailures > 0) {
-        const msg = readFailures === files.length
+        const msg = readFailures === total
             ? `Could not read ${readFailures} photo${readFailures > 1 ? 's' : ''} — photos may not be downloaded from cloud yet`
-            : `${readFailures} of ${files.length} photos could not be read — they may not be downloaded from cloud yet`;
+            : `${readFailures} of ${total} photos could not be read — they may not be downloaded from cloud yet`;
         showToast(msg, 'error');
         console.warn(`[DukeCam] ${readFailures} file(s) failed to read`);
     }
 
+    console.log(`[DukeCam] Enqueue complete: ${enqueued}/${total} queued (${readFailures} unreadable, ${quotaFailures} quota)`);
+
     if (dbAvailable) {
-        console.log(`[DukeCam] All files queued, starting processQueue`);
-        // Register for Background Sync so SW can upload even if tab closes
         registerPhotoSync();
         processQueue();
     }
@@ -248,7 +368,7 @@ async function uploadItem(item) {
         console.log(`[DukeCam] Upload success: ${item.fileName} → id=${result.id}`);
         await dbDelete(item.id);
         updateQueueItem(item.id, 'done', '✓ Uploaded');
-        showToast('Photo uploaded!', 'success');
+        batchTracker.recordUploaded(item.batchId);
         fadeOutQueueItem(item.id);
 
     } catch (err) {
@@ -258,7 +378,8 @@ async function uploadItem(item) {
             item.status = 'failed';
             await dbPut(item);
             updateQueueItem(item.id, 'error', `Failed after ${MAX_RETRIES} attempts`);
-            showToast('Upload failed — tap to retry', 'error');
+            batchTracker.recordFailed(item.batchId);
+            showToast(`Upload failed: ${item.fileName} — tap Retry`, 'error');
         } else {
             item.status = 'pending';
             await dbPut(item);
@@ -281,7 +402,7 @@ async function directUpload(item) {
             const result = await doUpload(item);
             console.log(`[DukeCam] Direct upload success: ${item.fileName} → id=${result.id}`);
             updateQueueItem(item.id, 'done', '✓ Uploaded');
-            showToast('Photo uploaded!', 'success');
+            batchTracker.recordUploaded(item.batchId);
             fadeOutQueueItem(item.id);
             return;
         } catch (err) {
@@ -289,7 +410,8 @@ async function directUpload(item) {
             console.error(`[DukeCam] Direct upload attempt ${retries} failed:`, err);
             if (retries >= MAX_RETRIES) {
                 updateQueueItem(item.id, 'error', `Failed after ${MAX_RETRIES} attempts`);
-                showToast('Upload failed', 'error');
+                batchTracker.recordFailed(item.batchId);
+                showToast(`Upload failed: ${item.fileName}`, 'error');
             } else {
                 const delay = RETRY_BASE_MS * Math.pow(2, Math.min(retries - 1, 5));
                 updateQueueItem(item.id, 'retrying', `Retry ${retries}/${MAX_RETRIES}...`);
@@ -302,7 +424,14 @@ async function directUpload(item) {
 // ─── Shared upload logic (XHR) ───────────────────────────────────
 
 function doUpload(item) {
-    const blob = new Blob([item.blob], { type: item.mimeType || 'image/jpeg' });
+    // item.blob may be a Blob/File (new code path) or an ArrayBuffer
+    // (legacy queue entries from before the streaming rewrite).
+    let blob;
+    if (item.blob instanceof Blob) {
+        blob = item.blob;
+    } else {
+        blob = new Blob([item.blob], { type: item.mimeType || 'image/jpeg' });
+    }
     const formData = new FormData();
     formData.append('file', blob, item.fileName || 'photo.jpg');
     formData.append('project_id', item.projectId);
@@ -460,10 +589,12 @@ function renderQueueItem(item) {
         <button class="retry-btn" onclick="retryItem('${item.id}')">Retry</button>
     `;
 
-    // Create thumbnail preview from blob
+    // Create thumbnail preview from blob (Blob/File or legacy ArrayBuffer)
     try {
-        const blob = new Blob([item.blob], { type: item.mimeType || 'image/jpeg' });
-        const url = URL.createObjectURL(blob);
+        const previewBlob = (item.blob instanceof Blob)
+            ? item.blob
+            : new Blob([item.blob], { type: item.mimeType || 'image/jpeg' });
+        const url = URL.createObjectURL(previewBlob);
         div.querySelector('img').src = url;
     } catch (e) {
         console.warn('[DukeCam] Could not create preview:', e);
