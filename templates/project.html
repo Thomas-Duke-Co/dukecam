@@ -176,7 +176,7 @@
 {{end}}
 
 {{define "scripts"}}
-<script src="/static/js/upload.js?v=6"></script>
+<script src="/static/js/upload.js?v=7"></script>
 <script>
     var PROJECT_ID = {{.Project.ID}};
     var PROJECT_SLUG = "{{.Project.Slug}}";
@@ -329,12 +329,15 @@
         saveWorker();
 
         var caption = document.getElementById('caption').value.trim();
-        enqueueFiles(files, PROJECT_ID, info.workerId, info.workerName, caption, activeTag);
-
-        setTimeout(function() {
-            document.getElementById('camera-input').value = '';
-            document.getElementById('file-input').value = '';
-        }, 100);
+        // Don't clear the inputs until enqueueFiles has fully read every
+        // file's bytes — on iOS Safari, clearing input.value invalidates
+        // the File objects in the FileList, which silently broke uploads
+        // 3..N on a large batch.
+        enqueueFiles(files, PROJECT_ID, info.workerId, info.workerName, caption, activeTag)
+            .finally(function() {
+                document.getElementById('camera-input').value = '';
+                document.getElementById('file-input').value = '';
+            });
     }
 
     function showStatus(msg, type) {

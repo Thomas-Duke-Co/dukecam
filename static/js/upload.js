@@ -217,73 +217,106 @@ async function enqueueFiles(files, projectId, workerId, workerName, caption, tag
 
     batchTracker.start(batchId, total);
 
-    // Process in small chunks with yields to the event loop so iOS Safari
-    // doesn't kill the page on large batches (100+ photos).
-    const CHUNK = 8;
-    for (let i = 0; i < files.length; i += CHUNK) {
-        const slice = Array.from(files).slice(i, i + CHUNK);
+    // Process one file at a time, reading its bytes into an ArrayBuffer
+    // and immediately persisting to IndexedDB so the queued item is
+    // INDEPENDENT of the source <input> element (iOS Safari invalidates
+    // File refs the moment input.value is cleared — that's why earlier
+    // versions silently lost everything past the first concurrent batch).
+    //
+    // We yield between files so a 100+ photo batch:
+    //   (a) never holds more than ONE photo's bytes in the JS heap at once
+    //       (the local `buffer` var is replaced + GC'd each iteration), and
+    //   (b) lets iOS repaint and keeps the script-too-long watchdog at bay.
+    const fileArr = Array.from(files);
+    for (let i = 0; i < fileArr.length; i++) {
+        const file = fileArr[i];
+        const sizeMB = (file && file.size ? (file.size / 1024 / 1024).toFixed(1) : '?');
+        console.log(`[DukeCam] Enqueue ${i + 1}/${total}: ${file && file.name} (${sizeMB}MB, ${file && file.type || 'unknown'})`);
 
-        for (const file of slice) {
-            const sizeMB = (file.size / 1024 / 1024).toFixed(1);
-            console.log(`[DukeCam] Enqueue: ${file.name} (${sizeMB}MB, ${file.type || 'unknown type'})`);
-
-            if (!file || file.size === 0) {
-                console.warn(`[DukeCam] Empty/unreadable file ${file && file.name} — skipping`);
-                readFailures++;
-                batchTracker.recordFailed(batchId);
-                continue;
-            }
-
-            const item = {
-                id: `${batchId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                // Store the Blob/File directly. IndexedDB streams these from
-                // disk via structured clone — does NOT hold the full bytes in
-                // the JS heap, unlike ArrayBuffer.
-                blob: file,
-                fileName: file.name || `photo-${Date.now()}.jpg`,
-                fileSize: file.size,
-                mimeType: file.type || 'image/jpeg',
-                projectId,
-                workerId: workerId || null,
-                workerName: workerName || null,
-                caption: caption || null,
-                tag: tag || null,
-                batchId,
-                status: 'pending',
-                retries: 0,
-                addedAt: Date.now(),
-            };
-
-            try {
-                if (dbAvailable) {
-                    await dbPut(item);
-                    renderQueueItem(item);
-                    enqueued++;
-                    batchTracker.recordQueued(batchId);
-                } else {
-                    // No IndexedDB: read into memory and upload directly.
-                    console.log(`[DukeCam] Direct upload (no IndexedDB): ${item.fileName}`);
-                    renderQueueItem(item);
-                    enqueued++;
-                    batchTracker.recordQueued(batchId);
-                    directUpload(item);
-                }
-            } catch (err) {
-                const name = (err && err.name) || '';
-                const msg = (err && err.message) || String(err);
-                console.error(`[DukeCam] Enqueue failed for ${file.name}: ${name} ${msg}`);
-                if (name === 'QuotaExceededError' || /quota/i.test(msg)) {
-                    quotaFailures++;
-                } else {
-                    readFailures++;
-                }
-                batchTracker.recordFailed(batchId);
-            }
+        if (!file || file.size === 0) {
+            console.warn(`[DukeCam] Empty/unreadable file ${file && file.name} — skipping`);
+            readFailures++;
+            batchTracker.recordFailed(batchId);
+            continue;
         }
 
-        // Yield so the UI can repaint the counter and so iOS doesn't
-        // think the page is hung.
-        await new Promise(r => (window.requestAnimationFrame || setTimeout)(r, 0));
+        let buffer;
+        try {
+            buffer = await file.arrayBuffer();
+        } catch (err) {
+            console.error(`[DukeCam] Failed to read ${file.name}:`, err);
+            readFailures++;
+            batchTracker.recordFailed(batchId);
+            continue;
+        }
+
+        if (!buffer || buffer.byteLength === 0) {
+            console.warn(`[DukeCam] Zero-byte read on ${file.name} — iCloud placeholder?`);
+            readFailures++;
+            batchTracker.recordFailed(batchId);
+            buffer = null;
+            continue;
+        }
+
+        const item = {
+            id: `${batchId}-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 8)}`,
+            blob: buffer, // ArrayBuffer — independent of the source <input>
+            fileName: file.name || `photo-${Date.now()}.jpg`,
+            fileSize: buffer.byteLength,
+            mimeType: file.type || 'image/jpeg',
+            projectId,
+            workerId: workerId || null,
+            workerName: workerName || null,
+            caption: caption || null,
+            tag: tag || null,
+            batchId,
+            status: 'pending',
+            retries: 0,
+            addedAt: Date.now(),
+        };
+
+        try {
+            if (dbAvailable) {
+                await dbPut(item);
+                renderQueueItem(item);
+                enqueued++;
+                batchTracker.recordQueued(batchId);
+            } else {
+                renderQueueItem(item);
+                enqueued++;
+                batchTracker.recordQueued(batchId);
+                directUpload(item);
+            }
+        } catch (err) {
+            const name = (err && err.name) || '';
+            const msg = (err && err.message) || String(err);
+            console.error(`[DukeCam] Enqueue failed for ${file.name}: ${name} ${msg}`);
+            if (name === 'QuotaExceededError' || /quota/i.test(msg)) {
+                quotaFailures++;
+            } else {
+                readFailures++;
+            }
+            batchTracker.recordFailed(batchId);
+        }
+
+        // Drop the JS-heap reference so the GC can reclaim this photo's
+        // bytes before we read the next one.
+        buffer = null;
+        item.blob = null;
+
+        // Yield between every file so iOS Safari stays responsive and
+        // the GC has a chance to run.
+        if ((i & 3) === 3) {
+            // Every 4th file, yield via rAF (heavier, lets paint happen).
+            await new Promise(r => (window.requestAnimationFrame || setTimeout)(r, 0));
+        } else {
+            // Otherwise, just a microtask yield.
+            await Promise.resolve();
+        }
+
+        // Kick the uploader as soon as 2 items are queued so uploads run
+        // concurrently with enqueueing (don't wait for all 110 to read).
+        if (i === 1 && dbAvailable) processQueue();
     }
 
     if (quotaFailures > 0) {
