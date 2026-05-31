@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -202,8 +203,14 @@ func (db *DB) ListProjectSummaries(ctx context.Context) ([]ProjectSummary, error
 		if err == nil {
 			for prows.Next() {
 				var p Photo
-				prows.Scan(&p.ID, &p.Filename, &p.UploadedAt)
+				if err := prows.Scan(&p.ID, &p.Filename, &p.UploadedAt); err != nil {
+					log.Printf("ListProjectSummaries: recent-photo scan (project %d): %v", pid, err)
+					continue
+				}
 				summaries[i].RecentPhotos = append(summaries[i].RecentPhotos, p)
+			}
+			if err := prows.Err(); err != nil {
+				log.Printf("ListProjectSummaries: recent-photo rows (project %d): %v", pid, err)
 			}
 			prows.Close()
 		}
@@ -221,8 +228,14 @@ func (db *DB) ListProjectSummaries(ctx context.Context) ([]ProjectSummary, error
 		if err == nil {
 			for wrows.Next() {
 				var name string
-				wrows.Scan(&name)
+				if err := wrows.Scan(&name); err != nil {
+					log.Printf("ListProjectSummaries: recent-worker scan (project %d): %v", pid, err)
+					continue
+				}
 				summaries[i].RecentWorkers = append(summaries[i].RecentWorkers, name)
+			}
+			if err := wrows.Err(); err != nil {
+				log.Printf("ListProjectSummaries: recent-worker rows (project %d): %v", pid, err)
 			}
 			wrows.Close()
 		}

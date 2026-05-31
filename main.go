@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -40,11 +42,19 @@ type App struct {
 func loadConfig() Config {
 	port := 4010
 	if p := os.Getenv("PORT"); p != "" {
-		port, _ = strconv.Atoi(p)
+		v, err := strconv.Atoi(p)
+		if err != nil || v < 1 || v > 65535 {
+			log.Fatalf("invalid PORT %q: must be an integer in 1..65535", p)
+		}
+		port = v
 	}
 	maxMB := 50
 	if m := os.Getenv("MAX_UPLOAD_MB"); m != "" {
-		maxMB, _ = strconv.Atoi(m)
+		v, err := strconv.Atoi(m)
+		if err != nil || v < 1 {
+			log.Fatalf("invalid MAX_UPLOAD_MB %q: must be a positive integer", m)
+		}
+		maxMB = v
 	}
 	return Config{
 		DatabaseURL: getEnv("DATABASE_URL", "postgres://trevor@localhost:5432/dukecam"),
@@ -256,12 +266,15 @@ func main() {
 
 	app.registerRoutes(e)
 
-	// Graceful start + shutdown
+	// Graceful start + shutdown. A real bind failure (port in use, permission)
+	// must crash the process — otherwise it stays alive with no listener and
+	// the container looks "up" while serving nothing. ErrServerClosed is the
+	// expected signal from e.Shutdown below, so it is not fatal.
 	go func() {
 		addr := fmt.Sprintf(":%d", cfg.Port)
 		log.Printf("DukeCam starting on %s", addr)
-		if err := e.Start(addr); err != nil {
-			log.Printf("server stopped: %v", err)
+		if err := e.Start(addr); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("server failed to start: %v", err)
 		}
 	}()
 
