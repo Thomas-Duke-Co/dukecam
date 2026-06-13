@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -15,6 +16,164 @@ import (
 	"github.com/labstack/echo/v4"
 	qrcode "github.com/skip2/go-qrcode"
 )
+
+// photoMeta carries the optional, per-upload attributes shared by the worker
+// upload path (/api/upload) and the PropertyOS ingest path
+// (/api/propertyos/photos). The PropertyOS fields are nil for worker uploads.
+type photoMeta struct {
+	WorkerID   *int
+	WorkerName string // free-text override when WorkerID is nil
+	Caption    string
+	Tag        string
+	BatchID    string
+
+	// PropertyOS linkage (claudecode-u61f)
+	BuildingID *int
+	UnitID     *int
+	TenantID   *int
+	TenantName *string
+	Scope      *string
+}
+
+// storeUploadedPhoto is the shared save core: validate size, process the image
+// (decode/orient/thumbnail/EXIF), persist the file + thumb under the project's
+// slug, and insert the photos row. Returns (photo, 0, "") on success or
+// (nil, httpStatus, message) on a handled failure so each caller can shape its
+// own response. Extracted from UploadPhoto so the PropertyOS ingest route reuses
+// the exact same pipeline.
+func (a *App) storeUploadedPhoto(c echo.Context, project *Project, file *multipart.FileHeader, meta photoMeta) (*Photo, int, string) {
+	ctx := c.Request().Context()
+
+	src, err := file.Open()
+	if err != nil {
+		return nil, http.StatusBadRequest, "cannot open file"
+	}
+	defer src.Close()
+
+	data, err := io.ReadAll(src)
+	if err != nil {
+		return nil, http.StatusBadRequest, "cannot read file"
+	}
+
+	maxBytes := a.config.MaxUploadMB * 1024 * 1024
+	if len(data) > maxBytes {
+		return nil, http.StatusRequestEntityTooLarge, fmt.Sprintf("file too large (max %dMB)", a.config.MaxUploadMB)
+	}
+	if len(data) == 0 {
+		return nil, http.StatusBadRequest, "empty file"
+	}
+
+	// Determine file extension
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	if ext == "" || !isAllowedExt(ext) {
+		ext = ".jpg"
+	}
+	// HEIC/HEIF: decoded to image.Image then saved as JPEG — remap extension so
+	// the stored file is served as a renderable JPEG.
+	if ext == ".heic" || ext == ".heif" {
+		ext = ".jpg"
+	}
+
+	processed, err := ProcessUpload(data)
+	if err != nil {
+		return nil, http.StatusBadRequest, "invalid image"
+	}
+
+	uniqueName := uuid.New().String()[:32] + ext
+	dateDir := time.Now().Format("2006/01/02")
+	photoPath := filepath.Join(a.config.StoragePath, project.Slug, dateDir, uniqueName)
+	thumbPath := filepath.Join(a.config.ThumbPath, project.Slug, dateDir, uniqueName)
+
+	if processed.Processed {
+		quality := 95
+		if ext == ".png" {
+			quality = 0
+		}
+		if err := SaveImage(processed.Image, photoPath, quality); err != nil {
+			log.Printf("save photo error: %v", err)
+			return nil, http.StatusInternalServerError, "save failed"
+		}
+		thumbQuality := 80
+		if ext == ".png" {
+			thumbQuality = 0
+		}
+		if err := SaveImage(processed.Thumb, thumbPath, thumbQuality); err != nil {
+			log.Printf("save thumb error: %v", err)
+			thumbPath = "" // non-fatal — continue without thumb
+		}
+	} else {
+		if err := SaveRaw(data, photoPath); err != nil {
+			log.Printf("save raw error: %v", err)
+			return nil, http.StatusInternalServerError, "save failed"
+		}
+		thumbPath = "" // no thumbnail for unprocessable formats
+	}
+
+	// Validate tag
+	tag := meta.Tag
+	if tag != "" && tag != "progress" && tag != "before" && tag != "after" && tag != "issue" {
+		tag = ""
+	}
+
+	// Nullable fields
+	var captionPtr, tagPtr, workerNamePtr, batchPtr, origFilename, thumbPathPtr *string
+	if meta.Caption != "" {
+		captionPtr = &meta.Caption
+	}
+	if tag != "" {
+		tagPtr = &tag
+	}
+	if meta.WorkerID == nil && meta.WorkerName != "" {
+		workerNamePtr = &meta.WorkerName
+	}
+	if meta.BatchID != "" {
+		batchPtr = &meta.BatchID
+	}
+	if file.Filename != "" {
+		fn := file.Filename
+		origFilename = &fn
+	}
+	if thumbPath != "" {
+		thumbPathPtr = &thumbPath
+	}
+
+	fileSize := len(data)
+	var width, height *int
+	if processed.Processed {
+		w, h := processed.Width, processed.Height
+		width, height = &w, &h
+	}
+
+	photo := &Photo{
+		ProjectID:          project.ID,
+		WorkerID:           meta.WorkerID,
+		WorkerNameOverride: workerNamePtr,
+		Filename:           uniqueName,
+		OriginalFilename:   origFilename,
+		Caption:            captionPtr,
+		Tag:                tagPtr,
+		Lat:                processed.EXIF.Lat,
+		Lng:                processed.EXIF.Lng,
+		TakenAt:            processed.EXIF.TakenAt,
+		FileSize:           &fileSize,
+		Width:              width,
+		Height:             height,
+		StoragePath:        photoPath,
+		ThumbPath:          thumbPathPtr,
+		UploadBatch:        batchPtr,
+		BuildingID:         meta.BuildingID,
+		UnitID:             meta.UnitID,
+		TenantID:           meta.TenantID,
+		TenantName:         meta.TenantName,
+		Scope:              meta.Scope,
+	}
+
+	if err := a.db.InsertPhoto(ctx, photo); err != nil {
+		log.Printf("insert photo error: %v", err)
+		return nil, http.StatusInternalServerError, "database error"
+	}
+	return photo, 0, ""
+}
 
 // ─── Upload API (JSON response — consumed by upload.js) ──────────
 
@@ -53,151 +212,24 @@ func (a *App) UploadPhoto(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "no file uploaded"})
 	}
 
-	src, err := file.Open()
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "cannot open file"})
-	}
-	defer src.Close()
+	log.Printf("upload: project=%s file=%s worker=%v", project.Slug, file.Filename, workerIDStr)
 
-	data, err := io.ReadAll(src)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "cannot read file"})
-	}
-
-	maxBytes := a.config.MaxUploadMB * 1024 * 1024
-	if len(data) > maxBytes {
-		return c.JSON(http.StatusRequestEntityTooLarge, map[string]string{
-			"error": fmt.Sprintf("file too large (max %dMB)", a.config.MaxUploadMB),
-		})
+	photo, status, errMsg := a.storeUploadedPhoto(c, project, file, photoMeta{
+		WorkerID:   workerID,
+		WorkerName: workerName,
+		Caption:    caption,
+		Tag:        tag,
+		BatchID:    batchID,
+	})
+	if status != 0 {
+		return c.JSON(status, map[string]string{"error": errMsg})
 	}
 
-	if len(data) == 0 {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "empty file"})
-	}
-
-	log.Printf("upload: project=%s file=%s size=%d worker=%v",
-		project.Slug, file.Filename, len(data), workerIDStr)
-
-	// Determine file extension
-	ext := strings.ToLower(filepath.Ext(file.Filename))
-	if ext == "" || !isAllowedExt(ext) {
-		ext = ".jpg"
-	}
-	// HEIC/HEIF: the goheif library decodes these to image.Image, then we save
-	// as JPEG. Remap extension so the stored file is served as a renderable JPEG.
-	if ext == ".heic" || ext == ".heif" {
-		ext = ".jpg"
-	}
-
-	// Process image (decode, orient, thumbnail, EXIF)
-	processed, err := ProcessUpload(data)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid image"})
-	}
-
-	// Generate unique filename and date-based directory
-	uniqueName := uuid.New().String()[:32] + ext
-	dateDir := time.Now().Format("2006/01/02")
-
-	photoPath := filepath.Join(a.config.StoragePath, project.Slug, dateDir, uniqueName)
-	thumbPath := filepath.Join(a.config.ThumbPath, project.Slug, dateDir, uniqueName)
-
-	if processed.Processed {
-		// Save processed image
-		if ext == ".png" {
-			if err := SaveImage(processed.Image, photoPath, 0); err != nil {
-				log.Printf("save photo error: %v", err)
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "save failed"})
-			}
-		} else {
-			if err := SaveImage(processed.Image, photoPath, 95); err != nil {
-				log.Printf("save photo error: %v", err)
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "save failed"})
-			}
-		}
-
-		// Save thumbnail
-		thumbQuality := 80
-		if ext == ".png" {
-			thumbQuality = 0
-		}
-		if err := SaveImage(processed.Thumb, thumbPath, thumbQuality); err != nil {
-			log.Printf("save thumb error: %v", err)
-			// Non-fatal — continue without thumb
-			thumbPath = ""
-		}
-	} else {
-		// Can't process — save raw bytes
-		if err := SaveRaw(data, photoPath); err != nil {
-			log.Printf("save raw error: %v", err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "save failed"})
-		}
-		thumbPath = "" // no thumbnail for unprocessable formats
-	}
-
-	// Validate tag
-	if tag != "" && tag != "progress" && tag != "before" && tag != "after" && tag != "issue" {
-		tag = ""
-	}
-
-	// Nullable fields
-	var captionPtr, tagPtr, workerNamePtr, batchPtr, origFilename, thumbPathPtr *string
-	if caption != "" {
-		captionPtr = &caption
-	}
-	if tag != "" {
-		tagPtr = &tag
-	}
-	if workerID == nil && workerName != "" {
-		workerNamePtr = &workerName
-	}
-	if batchID != "" {
-		batchPtr = &batchID
-	}
-	if file.Filename != "" {
-		fn := file.Filename
-		origFilename = &fn
-	}
-	if thumbPath != "" {
-		thumbPathPtr = &thumbPath
-	}
-
-	fileSize := len(data)
-	var width, height *int
-	if processed.Processed {
-		w, h := processed.Width, processed.Height
-		width, height = &w, &h
-	}
-
-	photo := &Photo{
-		ProjectID:          projectID,
-		WorkerID:           workerID,
-		WorkerNameOverride: workerNamePtr,
-		Filename:           uniqueName,
-		OriginalFilename:   origFilename,
-		Caption:            captionPtr,
-		Tag:                tagPtr,
-		Lat:                processed.EXIF.Lat,
-		Lng:                processed.EXIF.Lng,
-		TakenAt:            processed.EXIF.TakenAt,
-		FileSize:           &fileSize,
-		Width:              width,
-		Height:             height,
-		StoragePath:        photoPath,
-		ThumbPath:          thumbPathPtr,
-		UploadBatch:        batchPtr,
-	}
-
-	if err := a.db.InsertPhoto(ctx, photo); err != nil {
-		log.Printf("insert photo error: %v", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "database error"})
-	}
-
-	log.Printf("upload complete: id=%d file=%s project=%s", photo.ID, uniqueName, project.Slug)
+	log.Printf("upload complete: id=%d file=%s project=%s", photo.ID, photo.Filename, project.Slug)
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"id":       photo.ID,
-		"filename": uniqueName,
+		"filename": photo.Filename,
 		"status":   "ok",
 	})
 }

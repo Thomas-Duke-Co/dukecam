@@ -48,12 +48,21 @@ type Photo struct {
 	StoragePath        string
 	ThumbPath          *string
 	UploadBatch        *string
+	// PropertyOS linkage (claudecode-u61f). All nullable — worker uploads leave
+	// these unset; PropertyOS uploads fill them. Keyed durably on UnitID; the
+	// tenant fields are a point-in-time stamp. Scope = "property" | "tenant".
+	BuildingID *int
+	UnitID     *int
+	TenantID   *int
+	TenantName *string
+	Scope      *string
 }
 
 // PhotoWithWorker includes the resolved worker name from a JOIN.
 type PhotoWithWorker struct {
 	Photo
-	WorkerName string
+	WorkerName  string
+	ProjectSlug string // set by building-scoped reads; empty otherwise
 }
 
 func (p *PhotoWithWorker) DisplayName() string {
@@ -151,6 +160,20 @@ func (db *DB) CreateTables(ctx context.Context) error {
 	);
 	CREATE INDEX IF NOT EXISTS idx_photos_filename ON photos(filename);
 	CREATE INDEX IF NOT EXISTS idx_photos_project_id ON photos(project_id);
+
+	-- PropertyOS linkage (claudecode-u61f): photos uploaded from the PropertyOS
+	-- building report carry the originating building + (optionally) the suite/unit
+	-- and the tenant that occupied it at upload time. Keyed durably on unit_id;
+	-- tenant_id/tenant_name are stamped for context and survive turnover.
+	-- scope = 'property' (building-wide) | 'tenant' (a specific suite/tenant).
+	ALTER TABLE photos ADD COLUMN IF NOT EXISTS building_id  INTEGER;
+	ALTER TABLE photos ADD COLUMN IF NOT EXISTS unit_id      INTEGER;
+	ALTER TABLE photos ADD COLUMN IF NOT EXISTS tenant_id    INTEGER;
+	ALTER TABLE photos ADD COLUMN IF NOT EXISTS tenant_name  VARCHAR(300);
+	ALTER TABLE photos ADD COLUMN IF NOT EXISTS scope        VARCHAR(20);
+	CREATE INDEX IF NOT EXISTS idx_photos_building_id     ON photos(building_id);
+	CREATE INDEX IF NOT EXISTS idx_photos_building_unit   ON photos(building_id, unit_id);
+	CREATE INDEX IF NOT EXISTS idx_photos_building_tenant ON photos(building_id, tenant_id);
 	`
 	_, err := db.pool.Exec(ctx, sql)
 	return err
@@ -281,6 +304,88 @@ func (db *DB) CreateProject(ctx context.Context, name, slug string, address, des
 		return nil, err
 	}
 	return &p, nil
+}
+
+// GetOrCreateProjectForBuilding resolves the DukeCam project that backs a
+// PropertyOS building, creating it on first use so the "no project linked"
+// banner clears itself (claudecode-u61f). Resolution order:
+//  1. preferredSlug (the buildings.dukecam_slug PropertyOS already knows), if set
+//  2. a slug derived from the building name
+//  3. otherwise create a new project from name/address
+// Returns the project so the caller can hand the slug back to PropertyOS to
+// persist. Concurrency-safe: a lost insert race falls back to a re-fetch.
+func (db *DB) GetOrCreateProjectForBuilding(ctx context.Context, preferredSlug, name string, address *string) (*Project, error) {
+	if preferredSlug != "" {
+		if p, err := db.GetProjectBySlug(ctx, preferredSlug); err == nil {
+			return p, nil
+		}
+	}
+	slug := slugify(name)
+	if slug == "" {
+		return nil, fmt.Errorf("cannot derive slug from building name %q", name)
+	}
+	if p, err := db.GetProjectBySlug(ctx, slug); err == nil {
+		return p, nil
+	}
+	p, err := db.CreateProject(ctx, name, slug, address, nil)
+	if err != nil {
+		// Likely a unique-slug race with a concurrent first upload — re-fetch.
+		if p2, err2 := db.GetProjectBySlug(ctx, slug); err2 == nil {
+			return p2, nil
+		}
+		return nil, err
+	}
+	return p, nil
+}
+
+// GetPhotosForBuilding returns photos for a building, optionally narrowed to a
+// unit or tenant, for the PropertyOS in-app grid (claudecode-u61f). Pass
+// unitID/tenantID as nil to skip that filter. Only photos carrying the
+// building_id linkage are returned (worker-only uploads are excluded).
+func (db *DB) GetPhotosForBuilding(ctx context.Context, buildingID int, unitID, tenantID *int, limit int) ([]PhotoWithWorker, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+	rows, err := db.pool.Query(ctx, `
+		SELECT ph.id, ph.project_id, ph.worker_id, ph.worker_name_override,
+		       ph.filename, ph.original_filename, ph.caption, ph.tag,
+		       ph.lat, ph.lng, ph.taken_at, ph.uploaded_at,
+		       ph.file_size, ph.width, ph.height,
+		       ph.storage_path, ph.thumb_path, ph.upload_batch,
+		       ph.building_id, ph.unit_id, ph.tenant_id, ph.tenant_name, ph.scope,
+		       COALESCE(w.name, '') as worker_name, pr.slug as project_slug
+		FROM photos ph
+		LEFT JOIN workers w ON ph.worker_id = w.id
+		JOIN projects pr ON ph.project_id = pr.id
+		WHERE ph.building_id = $1
+		  AND ($2::int IS NULL OR ph.unit_id = $2)
+		  AND ($3::int IS NULL OR ph.tenant_id = $3)
+		ORDER BY ph.uploaded_at DESC
+		LIMIT $4
+	`, buildingID, unitID, tenantID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var photos []PhotoWithWorker
+	for rows.Next() {
+		var p PhotoWithWorker
+		err := rows.Scan(
+			&p.ID, &p.ProjectID, &p.WorkerID, &p.WorkerNameOverride,
+			&p.Filename, &p.OriginalFilename, &p.Caption, &p.Tag,
+			&p.Lat, &p.Lng, &p.TakenAt, &p.UploadedAt,
+			&p.FileSize, &p.Width, &p.Height,
+			&p.StoragePath, &p.ThumbPath, &p.UploadBatch,
+			&p.BuildingID, &p.UnitID, &p.TenantID, &p.TenantName, &p.Scope,
+			&p.WorkerName, &p.ProjectSlug,
+		)
+		if err != nil {
+			return nil, err
+		}
+		photos = append(photos, p)
+	}
+	return photos, nil
 }
 
 func (db *DB) ToggleProjectActive(ctx context.Context, id int) (*Project, error) {
@@ -436,13 +541,15 @@ func (db *DB) InsertPhoto(ctx context.Context, p *Photo) error {
 		INSERT INTO photos (
 			project_id, worker_id, worker_name_override, filename,
 			original_filename, caption, tag, lat, lng, taken_at,
-			file_size, width, height, storage_path, thumb_path, upload_batch
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+			file_size, width, height, storage_path, thumb_path, upload_batch,
+			building_id, unit_id, tenant_id, tenant_name, scope
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
 		RETURNING id, uploaded_at
 	`,
 		p.ProjectID, p.WorkerID, p.WorkerNameOverride, p.Filename,
 		p.OriginalFilename, p.Caption, p.Tag, p.Lat, p.Lng, p.TakenAt,
 		p.FileSize, p.Width, p.Height, p.StoragePath, p.ThumbPath, p.UploadBatch,
+		p.BuildingID, p.UnitID, p.TenantID, p.TenantName, p.Scope,
 	).Scan(&p.ID, &p.UploadedAt)
 }
 

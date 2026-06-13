@@ -29,6 +29,7 @@ type Config struct {
 	FyxtSchema      string
 	PropertyOSURL   string
 	PropertyOSToken string
+	IngestToken     string // shared bearer for the PropertyOS ingest routes
 }
 
 // App is the main application container.
@@ -68,6 +69,7 @@ func loadConfig() Config {
 		FyxtSchema:      getEnv("FYXT_SCHEMA", "thomasduke"),
 		PropertyOSURL:   getEnv("PROPERTYOS_URL", "http://localhost:4125"),
 		PropertyOSToken: getEnv("PROPERTYOS_TOKEN", ""),
+		IngestToken:     getEnv("DUKECAM_INGEST_TOKEN", ""),
 	}
 }
 
@@ -101,6 +103,11 @@ func (a *App) registerRoutes(e *echo.Echo) {
 	e.GET("/api/photos/:slug", a.GetPhotos)
 	e.PATCH("/api/photo/:id", a.UpdatePhoto)
 	e.POST("/api/photo/:id/rotate", a.RotatePhoto)
+
+	// PropertyOS ingest (claudecode-u61f) — server-to-server, bearer-token gated.
+	// Consumed by PropertyOS's /api/buildings/[id]/photos proxy.
+	e.POST("/api/propertyos/photos", a.PropertyOSIngestPhoto, a.ingestAuth)
+	e.GET("/api/propertyos/photos", a.PropertyOSBuildingPhotos, a.ingestAuth)
 
 	// Worker self-registration (called from project page when user types a custom name)
 	e.POST("/api/workers/register", a.RegisterWorker)
