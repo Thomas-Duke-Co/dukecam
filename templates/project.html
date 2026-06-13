@@ -96,6 +96,9 @@
                     {{if eq (deref .Tag) "progress"}}bg-duke-teal{{end}}
                 ">{{deref .Tag}}</span>
                 {{end}}
+                {{if eq (deref .Scope) "tenant"}}
+                <span class="absolute top-1.5 right-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-duke-dark/85 text-white max-w-[85%] truncate" title="{{deref .TenantName}}">🏢 {{if deref .TenantName}}{{deref .TenantName}}{{else}}Tenant{{end}}</span>
+                {{end}}
                 {{if ne .DisplayName "Unknown"}}
                 <div class="absolute bottom-1.5 left-1.5 w-7 h-7 rounded-full bg-duke-teal text-white text-[11px] font-bold flex items-center justify-center shadow ring-1 ring-white/60" title="{{.DisplayName}}">
                     {{initials .DisplayName}}

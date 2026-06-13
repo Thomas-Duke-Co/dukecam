@@ -468,6 +468,7 @@ func (db *DB) GetPhotosForProject(ctx context.Context, projectID int) ([]PhotoWi
 		       ph.lat, ph.lng, ph.taken_at, ph.uploaded_at,
 		       ph.file_size, ph.width, ph.height,
 		       ph.storage_path, ph.thumb_path, ph.upload_batch,
+		       ph.scope, ph.tenant_name,
 		       COALESCE(w.name, '') as worker_name
 		FROM photos ph
 		LEFT JOIN workers w ON ph.worker_id = w.id
@@ -488,6 +489,7 @@ func (db *DB) GetPhotosForProject(ctx context.Context, projectID int) ([]PhotoWi
 			&p.Lat, &p.Lng, &p.TakenAt, &p.UploadedAt,
 			&p.FileSize, &p.Width, &p.Height,
 			&p.StoragePath, &p.ThumbPath, &p.UploadBatch,
+			&p.Scope, &p.TenantName,
 			&p.WorkerName,
 		)
 		if err != nil {
@@ -505,6 +507,7 @@ func (db *DB) GetPhotosForProjectPaginated(ctx context.Context, projectID, offse
 		       ph.lat, ph.lng, ph.taken_at, ph.uploaded_at,
 		       ph.file_size, ph.width, ph.height,
 		       ph.storage_path, ph.thumb_path, ph.upload_batch,
+		       ph.scope, ph.tenant_name,
 		       COALESCE(w.name, '') as worker_name
 		FROM photos ph
 		LEFT JOIN workers w ON ph.worker_id = w.id
@@ -526,6 +529,7 @@ func (db *DB) GetPhotosForProjectPaginated(ctx context.Context, projectID, offse
 			&p.Lat, &p.Lng, &p.TakenAt, &p.UploadedAt,
 			&p.FileSize, &p.Width, &p.Height,
 			&p.StoragePath, &p.ThumbPath, &p.UploadBatch,
+			&p.Scope, &p.TenantName,
 			&p.WorkerName,
 		)
 		if err != nil {
