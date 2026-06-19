@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -182,6 +183,41 @@ func (a *App) PropertyOSBuildingPhotos(c echo.Context) error {
 		}
 		out = append(out, item)
 	}
+
+	// Append photos from completed inspections tied to this building. They live
+	// in inspection_photos (served by id), separate from the photos table above.
+	// Skipped for tenant-scoped views since inspection photos have no tenant tag.
+	// IDs are namespaced (+1e9) so they never collide with photos-table ids used
+	// as React keys on the PropertyOS grid.
+	if tenantID == nil {
+		insp, ierr := a.db.GetInspectionPhotosForBuilding(ctx, buildingID, unitID, limit)
+		if ierr != nil {
+			log.Printf("propertyos building photos: inspection photos query failed: %v", ierr)
+		} else {
+			for _, p := range insp {
+				uploader := "Inspection"
+				if p.InspectorName != nil && *p.InspectorName != "" {
+					uploader = *p.InspectorName
+				}
+				idStr := strconv.Itoa(p.ID)
+				out = append(out, map[string]interface{}{
+					"id":          1000000000 + p.ID,
+					"photo_url":   "/api/inspections/photos/" + idStr,
+					"thumb_url":   "/api/inspections/photos/" + idStr + "/thumb",
+					"uploaded_at": p.CreatedAt,
+					"uploader":    uploader,
+					"scope":       "inspection",
+					"unit_id":     p.UnitID,
+					"tenant_id":   nil,
+					"tenant_name": nil,
+					"caption":     p.Caption,
+					"tag":         "inspection",
+					"taken_at":    p.CreatedAt,
+				})
+			}
+		}
+	}
+
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"building_id": buildingID,
 		"count":       len(out),

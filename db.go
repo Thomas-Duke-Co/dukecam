@@ -388,6 +388,55 @@ func (db *DB) GetPhotosForBuilding(ctx context.Context, buildingID int, unitID, 
 	return photos, nil
 }
 
+// InspectionPhotoForBuilding is a slim view of an inspection photo joined to its
+// inspection, for surfacing inspection photos in the PropertyOS report Photos
+// tab (claudecode follow-up). Inspection photos live in inspection_photos keyed
+// by inspection_id; the building link comes from inspections.building_id.
+type InspectionPhotoForBuilding struct {
+	ID            int
+	InspectionID  int
+	Caption       *string
+	CreatedAt     time.Time
+	UnitID        *int
+	InspectorName *string
+}
+
+// GetInspectionPhotosForBuilding returns photos from COMPLETED inspections tied
+// to a building (optionally narrowed to a unit). These are served by id via
+// /api/inspections/photos/:id, unlike worker/PropertyOS uploads which live in
+// the photos table and are served by slug+filename.
+func (db *DB) GetInspectionPhotosForBuilding(ctx context.Context, buildingID int, unitID *int, limit int) ([]InspectionPhotoForBuilding, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+	rows, err := db.pool.Query(ctx, `
+		SELECT ip.id, ip.inspection_id, ip.caption, ip.created_at,
+		       i.unit_id, i.inspector_name
+		FROM inspection_photos ip
+		JOIN inspections i ON i.id = ip.inspection_id
+		WHERE i.building_id = $1
+		  AND i.status = 'completed'
+		  AND ($2::int IS NULL OR i.unit_id = $2)
+		ORDER BY ip.created_at DESC
+		LIMIT $3
+	`, buildingID, unitID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var photos []InspectionPhotoForBuilding
+	for rows.Next() {
+		var p InspectionPhotoForBuilding
+		if err := rows.Scan(&p.ID, &p.InspectionID, &p.Caption, &p.CreatedAt,
+			&p.UnitID, &p.InspectorName); err != nil {
+			return nil, err
+		}
+		photos = append(photos, p)
+	}
+	return photos, nil
+}
+
 func (db *DB) ToggleProjectActive(ctx context.Context, id int) (*Project, error) {
 	var p Project
 	err := db.pool.QueryRow(ctx, `
