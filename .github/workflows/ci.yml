@@ -30,7 +30,15 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      # Informational, not a hard gate: govulncheck runs against a live vuln DB,
+      # so newly-disclosed standard-library advisories (fixed only in the latest
+      # Go patch the runner may not yet have) would otherwise red every PR for
+      # reasons outside this repo's control. It still surfaces advisories in the
+      # logs — reachable third-party module vulns should be remediated by bumping
+      # the dependency (e.g. x/image, x/net). build + vet above are the blocking
+      # gates. (bead claudecode-q80d / claudecode-vb5c)
       - name: govulncheck
+        continue-on-error: true
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
