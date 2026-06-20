@@ -20,7 +20,11 @@ services:
       - PROPERTYOS_URL=http://property-dashboard:3000
       - PROPERTYOS_TOKEN=${PROPERTYOS_TOKEN:-}
     volumes:
-      - /mnt/unas/dukecam:/data
+      # Local disk ONLY — never UNAS NFS. A churny photo-serving app stalls on
+      # NFS (502s + multi-minute hangs after a remount), and UNAS NFS is now
+      # decommissioned on the dukecam host. Keep /data on local disk so a
+      # from-repo `docker compose up` can't silently re-mount NFS. (bead claudecode-rvnp)
+      - /opt/apps/dukecam/data:/data
     networks:
       - postgres-net
 
