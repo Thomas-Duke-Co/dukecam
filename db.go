@@ -214,54 +214,84 @@ func (db *DB) ListProjectSummaries(ctx context.Context) ([]ProjectSummary, error
 		summaries = append(summaries, ps)
 	}
 
-	// Fetch recent photos and workers for each project
+	// Enrich each summary with its recent photos + workers. Previously this ran
+	// two queries PER project (O(2N+1) round-trips on the home page); now it is
+	// two windowed queries total, fanned back out to the summaries in O(1) via
+	// an index keyed on project id. Enrichment failures degrade gracefully — a
+	// missing recent-photos/workers set still renders the project card.
+	byID := make(map[int]*ProjectSummary, len(summaries))
 	for i := range summaries {
-		pid := summaries[i].Project.ID
+		byID[summaries[i].Project.ID] = &summaries[i]
+	}
 
-		// Recent 4 photos
-		prows, err := db.pool.Query(ctx, `
-			SELECT id, filename, uploaded_at FROM photos
-			WHERE project_id = $1 ORDER BY uploaded_at DESC LIMIT 4
-		`, pid)
-		if err == nil {
-			for prows.Next() {
-				var p Photo
-				if err := prows.Scan(&p.ID, &p.Filename, &p.UploadedAt); err != nil {
-					log.Printf("ListProjectSummaries: recent-photo scan (project %d): %v", pid, err)
-					continue
-				}
-				summaries[i].RecentPhotos = append(summaries[i].RecentPhotos, p)
-			}
-			if err := prows.Err(); err != nil {
-				log.Printf("ListProjectSummaries: recent-photo rows (project %d): %v", pid, err)
-			}
-			prows.Close()
-		}
-
-		// Recent unique workers
-		wrows, err := db.pool.Query(ctx, `
-			SELECT DISTINCT ON (worker_display)
-			       COALESCE(w.name, ph.worker_name_override, 'Unknown') as worker_display
+	// Recent 4 photos per active project, ranked newest-first. The id tiebreaker
+	// makes the cut deterministic when uploaded_at ties.
+	if prows, err := db.pool.Query(ctx, `
+		SELECT project_id, id, filename, uploaded_at FROM (
+			SELECT ph.project_id, ph.id, ph.filename, ph.uploaded_at,
+			       ROW_NUMBER() OVER (PARTITION BY ph.project_id
+			                          ORDER BY ph.uploaded_at DESC, ph.id DESC) AS rn
 			FROM photos ph
-			LEFT JOIN workers w ON ph.worker_id = w.id
-			WHERE ph.project_id = $1
-			ORDER BY worker_display, ph.uploaded_at DESC
-			LIMIT 4
-		`, pid)
-		if err == nil {
-			for wrows.Next() {
-				var name string
-				if err := wrows.Scan(&name); err != nil {
-					log.Printf("ListProjectSummaries: recent-worker scan (project %d): %v", pid, err)
-					continue
-				}
-				summaries[i].RecentWorkers = append(summaries[i].RecentWorkers, name)
+			JOIN projects p ON p.id = ph.project_id AND p.active = true
+		) t
+		WHERE rn <= 4
+		ORDER BY project_id, rn
+	`); err != nil {
+		log.Printf("ListProjectSummaries: recent-photos query: %v", err)
+	} else {
+		for prows.Next() {
+			var pid int
+			var p Photo
+			if err := prows.Scan(&pid, &p.ID, &p.Filename, &p.UploadedAt); err != nil {
+				log.Printf("ListProjectSummaries: recent-photo scan: %v", err)
+				continue
 			}
-			if err := wrows.Err(); err != nil {
-				log.Printf("ListProjectSummaries: recent-worker rows (project %d): %v", pid, err)
+			if ps := byID[pid]; ps != nil {
+				ps.RecentPhotos = append(ps.RecentPhotos, p)
 			}
-			wrows.Close()
 		}
+		if err := prows.Err(); err != nil {
+			log.Printf("ListProjectSummaries: recent-photo rows: %v", err)
+		}
+		prows.Close()
+	}
+
+	// Recent up-to-4 distinct workers per active project. Preserves the prior
+	// shape: dedup worker names, then take the first 4 alphabetically.
+	if wrows, err := db.pool.Query(ctx, `
+		SELECT project_id, worker_display FROM (
+			SELECT d.project_id, d.worker_display,
+			       ROW_NUMBER() OVER (PARTITION BY d.project_id
+			                          ORDER BY d.worker_display) AS rn
+			FROM (
+				SELECT ph.project_id,
+				       COALESCE(w.name, ph.worker_name_override, 'Unknown') AS worker_display
+				FROM photos ph
+				LEFT JOIN workers w ON ph.worker_id = w.id
+				JOIN projects p ON p.id = ph.project_id AND p.active = true
+				GROUP BY ph.project_id, COALESCE(w.name, ph.worker_name_override, 'Unknown')
+			) d
+		) t
+		WHERE rn <= 4
+		ORDER BY project_id, rn
+	`); err != nil {
+		log.Printf("ListProjectSummaries: recent-workers query: %v", err)
+	} else {
+		for wrows.Next() {
+			var pid int
+			var name string
+			if err := wrows.Scan(&pid, &name); err != nil {
+				log.Printf("ListProjectSummaries: recent-worker scan: %v", err)
+				continue
+			}
+			if ps := byID[pid]; ps != nil {
+				ps.RecentWorkers = append(ps.RecentWorkers, name)
+			}
+		}
+		if err := wrows.Err(); err != nil {
+			log.Printf("ListProjectSummaries: recent-worker rows: %v", err)
+		}
+		wrows.Close()
 	}
 
 	return summaries, nil
@@ -312,6 +342,7 @@ func (db *DB) CreateProject(ctx context.Context, name, slug string, address, des
 //  1. preferredSlug (the buildings.dukecam_slug PropertyOS already knows), if set
 //  2. a slug derived from the building name
 //  3. otherwise create a new project from name/address
+//
 // Returns the project so the caller can hand the slug back to PropertyOS to
 // persist. Concurrency-safe: a lost insert race falls back to a re-fetch.
 func (db *DB) GetOrCreateProjectForBuilding(ctx context.Context, preferredSlug, name string, address *string) (*Project, error) {
