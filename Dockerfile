@@ -1,4 +1,4 @@
-FROM golang:1.23-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # CGO required for goheif (HEIC/HEIF decoding via libde265)
 RUN apk add --no-cache git gcc g++ musl-dev libde265-dev
