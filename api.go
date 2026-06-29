@@ -295,13 +295,30 @@ func (a *App) GetPhotos(c echo.Context) error {
 // ─── Admin API (HTMX — returns HTML fragments) ──────────────────
 
 func (a *App) CreateProject(c echo.Context) error {
-	name := c.FormValue("name")
-	slug := c.FormValue("slug")
-	address := c.FormValue("address")
-	description := c.FormValue("description")
+	ctx := c.Request().Context()
+	name := strings.TrimSpace(c.FormValue("name"))
+	slug := strings.TrimSpace(c.FormValue("slug"))
+	address := strings.TrimSpace(c.FormValue("address"))
+	description := strings.TrimSpace(c.FormValue("description"))
 
-	if name == "" || slug == "" {
-		return c.String(http.StatusBadRequest, "Name and slug are required")
+	if name == "" {
+		return c.String(http.StatusBadRequest, "Project name is required.")
+	}
+	// Slug is optional in the form — auto-derive it from the name when blank so
+	// users don't have to hand-invent a unique identifier. (DukeCam "add project"
+	// used to silently fail on slug collisions — Paul MacVicar, 2026-06-29.)
+	if slug == "" {
+		slug = slugify(name)
+	}
+	if slug == "" {
+		return c.String(http.StatusBadRequest, "Could not derive a slug from that name — please type one.")
+	}
+
+	// The slug column is UNIQUE. Check up front and return a clear, user-facing
+	// message instead of a raw 500 that HTMX silently discards on a non-2xx.
+	if existing, err := a.db.GetProjectBySlug(ctx, slug); err == nil && existing != nil {
+		return c.String(http.StatusConflict,
+			fmt.Sprintf("Slug %q is already used by project %q. Enter a different slug.", slug, existing.Name))
 	}
 
 	var addrPtr, descPtr *string
@@ -312,8 +329,13 @@ func (a *App) CreateProject(c echo.Context) error {
 		descPtr = &description
 	}
 
-	project, err := a.db.CreateProject(c.Request().Context(), name, slug, addrPtr, descPtr)
+	project, err := a.db.CreateProject(ctx, name, slug, addrPtr, descPtr)
 	if err != nil {
+		// Catch a unique-violation race (two adds with the same slug at once).
+		if strings.Contains(err.Error(), "23505") || strings.Contains(strings.ToLower(err.Error()), "duplicate") {
+			return c.String(http.StatusConflict,
+				fmt.Sprintf("Slug %q is already taken — enter a different one.", slug))
+		}
 		return c.String(http.StatusInternalServerError, "Failed to create project: "+err.Error())
 	}
 

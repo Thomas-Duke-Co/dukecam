@@ -22,11 +22,11 @@
         <h2 class="text-lg font-bold text-duke-dark mb-4">📁 Projects</h2>
 
         <form hx-post="/api/admin/project" hx-target="#project-list" hx-swap="beforeend"
-              hx-on::after-request="if(event.detail.successful) this.reset()"
+              hx-on::after-request="var box=document.getElementById('project-error'); if(event.detail.successful){this.reset(); box.classList.add('hidden'); box.textContent='';} else {box.textContent=(event.detail.xhr&&event.detail.xhr.responseText)?event.detail.xhr.responseText:'Could not add project — please try again.'; box.classList.remove('hidden');}"
               class="flex flex-wrap gap-2 mb-4">
             <input name="name" placeholder="Project name" required
                    class="flex-1 min-w-[150px] px-3 py-2.5 border-2 border-gray-200 rounded-lg text-base focus:border-duke-teal focus:outline-none">
-            <input name="slug" placeholder="slug" required
+            <input name="slug" placeholder="slug (optional — auto from name)"
                    class="w-32 px-3 py-2.5 border-2 border-gray-200 rounded-lg text-base focus:border-duke-teal focus:outline-none">
             <input name="address" placeholder="Address (optional)"
                    class="flex-1 min-w-[150px] px-3 py-2.5 border-2 border-gray-200 rounded-lg text-base focus:border-duke-teal focus:outline-none">
@@ -35,6 +35,8 @@
                 Add Project
             </button>
         </form>
+        <div id="project-error" role="alert"
+             class="hidden mb-4 px-3 py-2 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200"></div>
 
         <ul id="project-list" class="divide-y divide-gray-100">
             {{range .Projects}}
