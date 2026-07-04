@@ -180,12 +180,10 @@ func (a *App) storeUploadedPhoto(c echo.Context, project *Project, file *multipa
 func (a *App) UploadPhoto(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	// Parse form fields
+	// Parse form fields. project_id=0 (or absent) = building-first upload from the
+	// native app; the project is get-or-created from building_id below.
 	projectIDStr := c.FormValue("project_id")
-	projectID, err := strconv.Atoi(projectIDStr)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid project_id"})
-	}
+	projectID, _ := strconv.Atoi(projectIDStr)
 
 	workerIDStr := c.FormValue("worker_id")
 	workerName := c.FormValue("worker_name")
@@ -200,10 +198,15 @@ func (a *App) UploadPhoto(c echo.Context) error {
 		}
 	}
 
-	// Validate project
-	project, err := a.db.GetProjectByID(ctx, projectID)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid project"})
+	// Resolve project. A positive project_id uses that named project; building-first
+	// clients (native app) send 0 and rely on the building block below.
+	var project *Project
+	if projectID > 0 {
+		if p, perr := a.db.GetProjectByID(ctx, projectID); perr == nil {
+			project = p
+		} else {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid project"})
+		}
 	}
 
 	// PropertyOS property/unit tagging (from the capture picker). When a building
@@ -232,6 +235,10 @@ func (a *App) UploadPhoto(c echo.Context) error {
 				}
 			}
 		}
+	}
+
+	if project == nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "project_id or building_id required"})
 	}
 
 	// Read uploaded file
