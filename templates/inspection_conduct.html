@@ -155,11 +155,19 @@
     <!-- Ad-hoc item form (add items beyond the template) -->
     {{if ne .Inspection.Status "completed"}}
     <div class="mt-6">
-        <!-- One-tap rapid photos: no form, no naming — straight into a burst session -->
-        <button onclick="quickPhotos()"
-                class="w-full py-4 bg-duke-teal text-white text-base font-bold rounded-xl shadow-lg active:bg-duke-dark transition-colors flex items-center justify-center gap-2 mb-4">
-            📷 Take Photos
-        </button>
+        <!-- Rapid camera photos + bulk import from the camera roll -->
+        <div class="grid grid-cols-2 gap-2 mb-4">
+            <button onclick="quickPhotos()"
+                    class="py-4 bg-duke-teal text-white text-sm font-bold rounded-xl shadow-lg active:bg-duke-dark transition-colors flex items-center justify-center gap-1.5">
+                📷 Take Photos
+            </button>
+            <button onclick="addFromRoll()"
+                    class="py-4 bg-white border-2 border-duke-teal text-duke-teal text-sm font-bold rounded-xl shadow active:bg-duke-teal/10 transition-colors flex items-center justify-center gap-1.5">
+                🖼️ Add from Roll
+            </button>
+        </div>
+        <input type="file" id="roll-input" accept="image/*" multiple class="hidden">
+        <p class="text-[11px] text-gray-400 text-center -mt-2 mb-4">Take Photos = live camera · Add from Roll = pick a batch you already shot</p>
 
         <div class="flex items-center gap-2 mb-3">
             <h2 class="text-sm font-bold text-duke-dark uppercase tracking-wide">Add Item</h2>
@@ -954,17 +962,70 @@ document.getElementById('photo-capture-input').addEventListener('change', async 
 // One-tap rapid photos: get-or-create a "Walk-through Photos" bucket and drop
 // straight into rapid-shoot — no form, no naming. Optional label starts a group.
 var INSPECTION_ID = {{.Inspection.ID}};
-function quickPhotos(label) {
+
+// get-or-create the photo bucket, return its id (Promise)
+function quickBucketId(label) {
     var fd = new FormData();
     if (label) fd.append('label', label);
-    fetch('/api/inspections/' + INSPECTION_ID + '/quick-bucket', { method: 'POST', body: fd })
+    return fetch('/api/inspections/' + INSPECTION_ID + '/quick-bucket', { method: 'POST', body: fd })
         .then(function(r){ return r.ok ? r.json() : Promise.reject(); })
-        .then(function(d){ if (d && d.item_id) startRapidShoot(INSPECTION_ID, d.item_id, true); else throw 0; })
+        .then(function(d){ return (d && d.item_id) ? d.item_id : Promise.reject(); });
+}
+function quickPhotos(label) {
+    quickBucketId(label)
+        .then(function(itemId){ startRapidShoot(INSPECTION_ID, itemId, true); })
         .catch(function(){ alert('Could not start photos — check your connection and try again.'); });
 }
 function newPhotoGroup() {
     var name = (prompt('Name this group (e.g. Roof, Parking lot, Suite 6017):', '') || '').trim();
     if (name) quickPhotos(name);
+}
+
+// Bulk import: pick a batch from the camera roll into the walk-through bucket
+function addFromRoll() {
+    quickBucketId(null)
+        .then(function(itemId){
+            var input = document.getElementById('roll-input');
+            if (!input) return;
+            input.dataset.bucket = itemId;
+            input.value = '';
+            input.click();
+        })
+        .catch(function(){ alert('Could not start upload — check your connection and try again.'); });
+}
+(function(){
+    var roll = document.getElementById('roll-input');
+    if (!roll) return; // completed inspection: no upload UI
+    roll.addEventListener('change', function() {
+        var files = Array.prototype.slice.call(this.files || []);
+        var bucketId = this.dataset.bucket;
+        this.value = '';
+        if (files.length && bucketId) uploadRollBatch(files, bucketId);
+    });
+})();
+function uploadRollBatch(files, bucketId) {
+    var total = files.length, processed = 0, failed = 0, idx = 0, active = 0, MAX = 3;
+    var bar = document.getElementById('rapid-shoot-bar');
+    var label = document.getElementById('rapid-shoot-count');
+    var sub = document.getElementById('rapid-shoot-uploading');
+    if (bar) bar.classList.remove('hidden');
+    function paint(){
+        if (label) label.textContent = 'Uploading from roll · ' + processed + '/' + total + (failed ? ' (' + failed + ' failed)' : '');
+        if (sub) sub.textContent = processed < total ? 'syncing…' : 'done';
+    }
+    paint();
+    var url = '/api/inspections/' + INSPECTION_ID + '/adhoc/' + bucketId + '/photo';
+    function pump(){
+        while (active < MAX && idx < files.length) {
+            active++;
+            var fd = new FormData(); fd.append('photo', files[idx++]);
+            fetch(url, { method: 'POST', body: fd })
+                .then(function(r){ if (!r || !r.ok) failed++; })
+                .catch(function(){ failed++; })
+                .finally(function(){ active--; processed++; paint(); if (processed >= total) { setTimeout(function(){ window.location.reload(); }, 900); } else pump(); });
+        }
+    }
+    pump();
 }
 
 // Keeps the camera open between shots so the inspector can take
