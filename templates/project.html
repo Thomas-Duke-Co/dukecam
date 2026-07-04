@@ -31,6 +31,21 @@
         <button class="tag-btn px-4 py-2 border-2 border-gray-200 rounded-full text-sm font-semibold cursor-pointer transition-all text-red-600 hover:border-red-600" data-tag="issue" onclick="toggleTag(this)">⚠️ Issue</button>
     </div>
 
+    <!-- Property / Unit picker (from PropertyOS) -->
+    <div id="pu-picker" class="mb-4 hidden" data-project-name="{{.Project.Name}}">
+        <label class="block text-sm font-semibold text-duke-dark mb-1.5">
+            📍 Property &amp; unit <span class="font-normal text-gray-400 text-xs">(optional — tags the photo to a suite)</span>
+        </label>
+        <select id="prop-select" onchange="propChanged()"
+                class="w-full px-3 py-3 border-2 border-gray-200 rounded-lg text-base bg-white focus:border-duke-teal focus:outline-none appearance-auto mb-2">
+            <option value="">— This project (whole property) —</option>
+        </select>
+        <select id="unit-select"
+                class="w-full px-3 py-3 border-2 border-gray-200 rounded-lg text-base bg-white focus:border-duke-teal focus:outline-none appearance-auto hidden">
+            <option value="">— Whole property —</option>
+        </select>
+    </div>
+
     <!-- Caption -->
     <textarea id="caption" rows="2" placeholder="Add a caption (optional)"
               class="w-full px-3 py-3 border-2 border-gray-200 rounded-lg text-base mb-4 resize-none focus:border-duke-teal focus:outline-none"></textarea>
@@ -179,9 +194,47 @@
 {{end}}
 
 {{define "scripts"}}
-<script src="/static/js/upload.js?v=7"></script>
+<script src="/static/js/upload.js?v=8"></script>
 <script>
     var PROJECT_ID = {{.Project.ID}};
+
+    // ── Property / Unit picker (PropertyOS-backed) ──
+    function captureTags() {
+        var ps = document.getElementById('prop-select');
+        var us = document.getElementById('unit-select');
+        var bid = ps ? ps.value : '';
+        var uid = (us && !us.classList.contains('hidden')) ? us.value : '';
+        return { buildingId: bid || null, unitId: uid || null, scope: bid ? (uid ? 'tenant' : 'property') : null };
+    }
+    function propChanged() {
+        var bid = document.getElementById('prop-select').value;
+        var us = document.getElementById('unit-select');
+        if (!bid) { us.classList.add('hidden'); us.innerHTML = '<option value="">— Whole property —</option>'; return; }
+        fetch('/api/capture/units/' + bid).then(function(r){ return r.json(); }).then(function(units){
+            var html = '<option value="">— Whole property —</option>';
+            (units || []).forEach(function(u){
+                var label = u.suite + (u.tenant ? ' · ' + u.tenant : '');
+                var opt = document.createElement('option'); opt.value = u.unit_id; opt.textContent = label;
+                html += opt.outerHTML;
+            });
+            us.innerHTML = html; us.classList.remove('hidden');
+        }).catch(function(){ us.classList.add('hidden'); });
+    }
+    (function initPropPicker(){
+        var wrap = document.getElementById('pu-picker'); if (!wrap) return;
+        fetch('/api/capture/properties').then(function(r){ return r.json(); }).then(function(props){
+            if (!props || !props.length) return;
+            var sel = document.getElementById('prop-select');
+            props.forEach(function(p){
+                var label = (p.prospect ? '⟡ ' : '') + p.name + (p.city ? ' · ' + p.city : '');
+                var opt = document.createElement('option'); opt.value = p.id; opt.textContent = label;
+                sel.appendChild(opt);
+            });
+            var projName = wrap.dataset.projectName || '';
+            for (var i = 0; i < props.length; i++) { if (props[i].name === projName) { sel.value = String(props[i].id); propChanged(); break; } }
+            wrap.classList.remove('hidden');
+        }).catch(function(){});
+    })();
     var PROJECT_SLUG = "{{.Project.Slug}}";
     var photos = {{.PhotosJSON}};
     var currentPhoto = 0;
@@ -336,7 +389,8 @@
         // file's bytes — on iOS Safari, clearing input.value invalidates
         // the File objects in the FileList, which silently broke uploads
         // 3..N on a large batch.
-        enqueueFiles(files, PROJECT_ID, info.workerId, info.workerName, caption, activeTag)
+        var pu = captureTags();
+        enqueueFiles(files, PROJECT_ID, info.workerId, info.workerName, caption, activeTag, pu.buildingId, pu.unitId, pu.scope)
             .finally(function() {
                 document.getElementById('camera-input').value = '';
                 document.getElementById('file-input').value = '';
@@ -651,7 +705,8 @@
 
             var info = getWorkerInfo();
             var caption = document.getElementById('caption').value.trim();
-            enqueueFiles([file], PROJECT_ID, info.workerId, info.workerName, caption, activeTag);
+            var pu = captureTags();
+            enqueueFiles([file], PROJECT_ID, info.workerId, info.workerName, caption, activeTag, pu.buildingId, pu.unitId, pu.scope);
 
             // Update counter
             shotCount++;

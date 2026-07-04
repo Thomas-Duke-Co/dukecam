@@ -207,7 +207,7 @@ function dbGetPending() {
 
 // ─── Queue Management ────────────────────────────────────────────
 
-async function enqueueFiles(files, projectId, workerId, workerName, caption, tag) {
+async function enqueueFiles(files, projectId, workerId, workerName, caption, tag, buildingId, unitId, scope) {
     const total = files.length;
     console.log(`[DukeCam] enqueueFiles: ${total} files, project=${projectId}, worker=${workerId || workerName || 'none'}, tag=${tag}`);
     const batchId = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString());
@@ -269,6 +269,9 @@ async function enqueueFiles(files, projectId, workerId, workerName, caption, tag
             workerName: workerName || null,
             caption: caption || null,
             tag: tag || null,
+            buildingId: buildingId || null,
+            unitId: unitId || null,
+            scope: scope || null,
             batchId,
             status: 'pending',
             retries: 0,

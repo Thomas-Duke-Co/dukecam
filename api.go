@@ -206,13 +206,41 @@ func (a *App) UploadPhoto(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid project"})
 	}
 
+	// PropertyOS property/unit tagging (from the capture picker). When a building
+	// is chosen, the photo is routed to that building's DukeCam project (created
+	// on demand) and stamped with building_id/unit_id/scope so PropertyOS surfaces
+	// it on the right building/suite.
+	var buildingID, unitID *int
+	var scope *string
+	if bid, e := strconv.Atoi(c.FormValue("building_id")); e == nil && bid > 0 {
+		buildingID = &bid
+		if uid, e2 := strconv.Atoi(c.FormValue("unit_id")); e2 == nil && uid > 0 {
+			unitID = &uid
+		}
+		sc := "property"
+		if unitID != nil {
+			sc = "tenant"
+		}
+		if s := c.FormValue("scope"); s == "property" || s == "tenant" {
+			sc = s
+		}
+		scope = &sc
+		if a.posDB != nil {
+			if name, e3 := a.posDB.PropertyName(ctx, bid); e3 == nil && name != "" {
+				if bp, e4 := a.db.GetOrCreateProjectForBuilding(ctx, "", name, nil); e4 == nil {
+					project = bp
+				}
+			}
+		}
+	}
+
 	// Read uploaded file
 	file, err := c.FormFile("file")
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "no file uploaded"})
 	}
 
-	log.Printf("upload: project=%s file=%s worker=%v", project.Slug, file.Filename, workerIDStr)
+	log.Printf("upload: project=%s file=%s worker=%v building=%v unit=%v", project.Slug, file.Filename, workerIDStr, buildingID, unitID)
 
 	photo, status, errMsg := a.storeUploadedPhoto(c, project, file, photoMeta{
 		WorkerID:   workerID,
@@ -220,6 +248,9 @@ func (a *App) UploadPhoto(c echo.Context) error {
 		Caption:    caption,
 		Tag:        tag,
 		BatchID:    batchID,
+		BuildingID: buildingID,
+		UnitID:     unitID,
+		Scope:      scope,
 	})
 	if status != 0 {
 		return c.JSON(status, map[string]string{"error": errMsg})

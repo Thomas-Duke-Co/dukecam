@@ -30,6 +30,7 @@ type Config struct {
 	PropertyOSURL   string
 	PropertyOSToken string
 	IngestToken     string // shared bearer for the PropertyOS ingest routes
+	POSDatabaseURL  string // read-only DSN to the PropertyOS DB (units for the capture picker)
 }
 
 // App is the main application container.
@@ -38,6 +39,7 @@ type App struct {
 	db         *DB
 	fyxt       *FyxtClient
 	propertyOS *PropertyOSClient
+	posDB      *POSDB
 }
 
 func loadConfig() Config {
@@ -70,6 +72,7 @@ func loadConfig() Config {
 		PropertyOSURL:   getEnv("PROPERTYOS_URL", "http://localhost:4125"),
 		PropertyOSToken: getEnv("PROPERTYOS_TOKEN", ""),
 		IngestToken:     getEnv("DUKECAM_INGEST_TOKEN", ""),
+		POSDatabaseURL:  getEnv("POS_DB_URL", ""),
 	}
 }
 
@@ -111,6 +114,10 @@ func (a *App) registerRoutes(e *echo.Echo) {
 
 	// Worker self-registration (called from project page when user types a custom name)
 	e.POST("/api/workers/register", a.RegisterWorker)
+
+	// Capture property/unit picker (reads PropertyOS DB directly)
+	e.GET("/api/capture/properties", a.CaptureProperties)
+	e.GET("/api/capture/units/:bid", a.CaptureUnits)
 
 	// Admin API (HTMX)
 	e.POST("/api/admin/project", a.CreateProject)
@@ -246,7 +253,19 @@ func main() {
 		log.Println("WARNING: FYXT_API_KEY not set — inspector list will be unavailable")
 	}
 
-	app := &App{config: cfg, db: db, fyxt: fyxt, propertyOS: pos}
+	// PropertyOS DB (read-only) for the capture-page property/unit picker.
+	posDB, err := NewPOSDB(context.Background(), cfg.POSDatabaseURL)
+	if err != nil {
+		log.Printf("WARNING: POS_DB_URL set but connection failed (%v) — unit picker disabled", err)
+		posDB = nil
+	} else if posDB == nil {
+		log.Println("WARNING: POS_DB_URL not set — capture property/unit picker disabled")
+	} else {
+		log.Println("PropertyOS DB connected — capture property/unit picker enabled")
+		defer posDB.Close()
+	}
+
+	app := &App{config: cfg, db: db, fyxt: fyxt, propertyOS: pos, posDB: posDB}
 
 	// Echo
 	e := echo.New()

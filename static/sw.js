@@ -8,7 +8,7 @@
  * - Background Sync API for inspection data + photo uploads
  */
 
-const SW_VERSION = '2.1.0';
+const SW_VERSION = '2.2.0';
 const CACHE_NAME = `dukecam-v${SW_VERSION}`;
 
 // App shell — precached on install. upload.js carries an explicit version
@@ -224,6 +224,9 @@ async function doPhotoUploadSync() {
                 if (item.worker) formData.append('worker', item.worker);
                 if (item.caption) formData.append('caption', item.caption);
                 if (item.tag) formData.append('tag', item.tag);
+                if (item.buildingId) formData.append('building_id', item.buildingId);
+                if (item.unitId) formData.append('unit_id', item.unitId);
+                if (item.scope) formData.append('scope', item.scope);
                 if (item.lat) formData.append('lat', item.lat);
                 if (item.lng) formData.append('lng', item.lng);
 
