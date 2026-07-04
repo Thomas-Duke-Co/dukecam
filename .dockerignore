@@ -1,0 +1,14 @@
+# Keep the Docker build context tiny — data/ alone is 9+ GB of photos and was
+# making COPY . . take ~6 minutes. None of this is needed to build the binary.
+data/
+photos/
+thumbs/
+uploads/
+.git/
+*.log
+.env
+.env.*
+*.md
+.DS_Store
+node_modules/
+tmp/

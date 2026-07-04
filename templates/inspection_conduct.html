@@ -147,17 +147,23 @@
         <svg class="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
         </svg>
-        <p class="text-sm">Blank inspection — no checklist items</p>
-        <p class="text-xs mt-1">Add ad-hoc items below to start your inspection</p>
+        <p class="text-sm">Blank inspection</p>
+        <p class="text-xs mt-1">Tap <span class="font-semibold text-duke-teal">Take Photos</span> below to start shooting</p>
     </div>
     {{end}}
 
     <!-- Ad-hoc item form (add items beyond the template) -->
     {{if ne .Inspection.Status "completed"}}
     <div class="mt-6">
+        <!-- One-tap rapid photos: no form, no naming — straight into a burst session -->
+        <button onclick="quickPhotos()"
+                class="w-full py-4 bg-duke-teal text-white text-base font-bold rounded-xl shadow-lg active:bg-duke-dark transition-colors flex items-center justify-center gap-2 mb-4">
+            📷 Take Photos
+        </button>
+
         <div class="flex items-center gap-2 mb-3">
             <h2 class="text-sm font-bold text-duke-dark uppercase tracking-wide">Add Item</h2>
-            <span class="text-[10px] text-indigo-600 bg-indigo-50 rounded-full px-2 py-0.5 font-medium">Ad-hoc</span>
+            <span class="text-[10px] text-gray-400 bg-gray-50 rounded-full px-2 py-0.5 font-medium">optional</span>
         </div>
 
         <!-- Toggle button to show/hide form -->
@@ -437,6 +443,10 @@
                 <span id="rapid-shoot-uploading" class="text-duke-teal"></span>
             </div>
         </div>
+        <button onclick="newPhotoGroup()"
+            class="px-3 py-2 bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-semibold rounded-lg transition-colors active:scale-95 flex-shrink-0">
+            + Group
+        </button>
         <button onclick="stopRapidShoot()"
             class="px-4 py-2 bg-white/15 hover:bg-white/25 text-white text-xs font-bold rounded-lg transition-colors active:scale-95 flex-shrink-0">
             Done
@@ -941,6 +951,22 @@ document.getElementById('photo-capture-input').addEventListener('change', async 
 })();
 
 // ─── Rapid Shoot ────────────────────────────────────────────────
+// One-tap rapid photos: get-or-create a "Walk-through Photos" bucket and drop
+// straight into rapid-shoot — no form, no naming. Optional label starts a group.
+var INSPECTION_ID = {{.Inspection.ID}};
+function quickPhotos(label) {
+    var fd = new FormData();
+    if (label) fd.append('label', label);
+    fetch('/api/inspections/' + INSPECTION_ID + '/quick-bucket', { method: 'POST', body: fd })
+        .then(function(r){ return r.ok ? r.json() : Promise.reject(); })
+        .then(function(d){ if (d && d.item_id) startRapidShoot(INSPECTION_ID, d.item_id, true); else throw 0; })
+        .catch(function(){ alert('Could not start photos — check your connection and try again.'); });
+}
+function newPhotoGroup() {
+    var name = (prompt('Name this group (e.g. Roof, Parking lot, Suite 6017):', '') || '').trim();
+    if (name) quickPhotos(name);
+}
+
 // Keeps the camera open between shots so the inspector can take
 // a burst of photos without returning to the checklist each time.
 var _rs = null;

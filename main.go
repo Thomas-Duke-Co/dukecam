@@ -147,6 +147,7 @@ func (a *App) registerRoutes(e *echo.Echo) {
 	e.POST("/api/inspections/:id/work-order", a.CreateFyxtWorkOrderHandler)
 
 	// Ad-hoc Items API (HTMX — add/update/delete items during inspection)
+	e.POST("/api/inspections/:id/quick-bucket", a.QuickBucketHandler)
 	e.POST("/api/inspections/:id/adhoc", a.CreateAdhocItemHandler)
 	e.POST("/api/inspections/:id/adhoc/:adhocId/status", a.UpdateAdhocItemStatusHandler)
 	e.POST("/api/inspections/:id/adhoc/:adhocId/photo", a.UploadAdhocItemPhotoHTMX)

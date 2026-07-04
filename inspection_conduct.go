@@ -630,6 +630,24 @@ func (db *DB) CreateAdhocItem(ctx context.Context, inspectionID int, label, cate
 	}, nil
 }
 
+// GetOrCreateAdhocBucket returns the id of an ad-hoc item with the given label
+// for the inspection, creating it if absent. Powers the one-tap rapid-photo flow:
+// repeated taps (or a page reload) reuse the same bucket instead of piling up dups.
+func (db *DB) GetOrCreateAdhocBucket(ctx context.Context, inspectionID int, label string) (int, error) {
+	var id int
+	if err := db.pool.QueryRow(ctx, `
+		SELECT id FROM inspection_adhoc_items
+		WHERE inspection_id = $1 AND label = $2
+		ORDER BY id LIMIT 1`, inspectionID, label).Scan(&id); err == nil {
+		return id, nil
+	}
+	item, err := db.CreateAdhocItem(ctx, inspectionID, label, "Walk-through", nil)
+	if err != nil {
+		return 0, err
+	}
+	return item.ItemID, nil
+}
+
 // UpdateAdhocItemStatus sets or clears the status of an ad-hoc item.
 func (db *DB) UpdateAdhocItemStatus(ctx context.Context, inspectionID, adhocID int, status *ItemStatus, notes *string) error {
 	var statusStr *string

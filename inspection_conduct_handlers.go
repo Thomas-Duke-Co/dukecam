@@ -389,6 +389,28 @@ func (a *App) CreateAdhocItemHandler(c echo.Context) error {
 	return c.HTML(http.StatusOK, itemHTML+progressHTML)
 }
 
+// POST /api/inspections/:id/quick-bucket — get-or-create a photo bucket (default
+// "Walk-through Photos") and return its id. Powers one-tap rapid photos on a blank
+// inspection: no form, no naming — straight into rapid-shoot. Optional `label`
+// starts a named group ("Roof", "Suite 6017").
+func (a *App) QuickBucketHandler(c echo.Context) error {
+	ctx := c.Request().Context()
+	inspectionID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid inspection id")
+	}
+	label := strings.TrimSpace(c.FormValue("label"))
+	if label == "" {
+		label = "Walk-through Photos"
+	}
+	id, err := a.db.GetOrCreateAdhocBucket(ctx, inspectionID, label)
+	if err != nil {
+		log.Printf("quick-bucket error: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to create photo bucket")
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{"item_id": id, "label": label})
+}
+
 // POST /api/inspections/:id/adhoc/:adhocId/status — update an ad-hoc item's status.
 func (a *App) UpdateAdhocItemStatusHandler(c echo.Context) error {
 	ctx := c.Request().Context()
