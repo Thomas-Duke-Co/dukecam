@@ -94,18 +94,9 @@ func (a *App) SearchPropertiesHTML(c echo.Context) error {
 	ctx := c.Request().Context()
 	q := strings.TrimSpace(c.QueryParam("q"))
 
-	if !a.propertyOS.IsConfigured() {
-		return c.HTML(http.StatusOK, `
-			<div class="text-center py-8 text-gray-400">
-				<p class="text-sm">PropertyOS not configured</p>
-				<p class="text-xs mt-1">Set PROPERTYOS_URL to enable property search</p>
-			</div>
-		`)
-	}
-
-	allBuildings, err := a.propertyOS.ListBuildings(ctx)
+	allBuildings, err := a.listPropertiesForPicker(ctx)
 	if err != nil {
-		log.Printf("PropertyOS fetch error: %v", err)
+		log.Printf("property search fetch error: %v", err)
 		return c.HTML(http.StatusOK, `
 			<div class="text-center py-8 text-gray-400">
 				<p class="text-sm">Could not reach PropertyOS</p>
@@ -196,6 +187,32 @@ func (a *App) GetPropertyUnitsHTML(c echo.Context) error {
 		return c.HTML(http.StatusOK, `<option value="">Invalid property</option>`)
 	}
 
+	// Build the HTML options — "Entire property" first, then each unit
+	var sb strings.Builder
+	sb.WriteString(`<option value="0">Entire Property</option>`)
+
+	// Prefer the direct DB read (works for staging prospects + avoids the
+	// /api/buildings/:id 401). Fall back to the PropertyOS API.
+	if a.posDB != nil {
+		units, err := a.posDB.ListUnits(ctx, id)
+		if err != nil {
+			log.Printf("units fetch error: %v", err)
+			return c.HTML(http.StatusOK, `<option value="">Could not load units</option>`)
+		}
+		for _, u := range units {
+			label := u.Suite
+			if label == "" {
+				label = fmt.Sprintf("Unit %d", u.UnitID)
+			}
+			if u.Tenant != "" {
+				label += " — " + u.Tenant
+			}
+			sb.WriteString(fmt.Sprintf(`<option value="%d" data-suite="%s">%s</option>`,
+				u.UnitID, escapeAttr(u.Suite), escapeHTML(label)))
+		}
+		return c.HTML(http.StatusOK, sb.String())
+	}
+
 	if !a.propertyOS.IsConfigured() {
 		return c.HTML(http.StatusOK, `<option value="">PropertyOS not configured</option>`)
 	}
@@ -209,10 +226,6 @@ func (a *App) GetPropertyUnitsHTML(c echo.Context) error {
 	if len(detail.RentRoll) == 0 {
 		return c.HTML(http.StatusOK, `<option value="">No units found</option>`)
 	}
-
-	// Build the HTML options — "Entire property" first, then each unit
-	var sb strings.Builder
-	sb.WriteString(`<option value="0">Entire Property</option>`)
 
 	for _, row := range detail.RentRoll {
 		label := row.Suite

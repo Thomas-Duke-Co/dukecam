@@ -17,13 +17,9 @@ import (
 func (a *App) ListProperties(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	if !a.propertyOS.IsConfigured() {
-		return c.JSON(http.StatusOK, []interface{}{})
-	}
-
-	buildings, err := a.propertyOS.ListBuildings(ctx)
+	buildings, err := a.listPropertiesForPicker(ctx)
 	if err != nil {
-		log.Printf("PropertyOS buildings fetch error: %v", err)
+		log.Printf("property list fetch error: %v", err)
 		return c.JSON(http.StatusOK, []interface{}{})
 	}
 
