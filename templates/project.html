@@ -50,25 +50,19 @@
     <textarea id="caption" rows="2" placeholder="Add a caption (optional)"
               class="w-full px-3 py-3 border-2 border-gray-200 rounded-lg text-base mb-4 resize-none focus:border-duke-teal focus:outline-none"></textarea>
 
-    <!-- Gallery Picker — primary action (always visible, multi-select) -->
-    <label for="file-input"
-           class="flex items-center justify-center gap-3 w-full py-4 bg-duke-teal text-white text-center text-lg font-bold rounded-xl cursor-pointer active:bg-duke-dark transition-colors mb-3">
-        🖼️ Select Photos from Gallery
-        <span class="text-xs font-normal opacity-80">(tap to select multiple)</span>
-    </label>
+    <!-- Capture row — matches the inspection page: live camera + bulk roll import -->
+    <div class="grid grid-cols-2 gap-2 mb-3">
+        <button onclick="takePhotos()"
+                class="py-4 bg-duke-teal text-white text-sm font-bold rounded-xl shadow-lg cursor-pointer active:bg-duke-dark transition-colors flex items-center justify-center gap-1.5">
+            📷 Take Photos
+        </button>
+        <label for="file-input"
+               class="py-4 bg-white border-2 border-duke-teal text-duke-teal text-sm font-bold rounded-xl shadow cursor-pointer active:bg-duke-teal/10 transition-colors flex items-center justify-center gap-1.5">
+            🖼️ Add from Roll
+        </label>
+    </div>
+    <p class="text-[11px] text-gray-400 text-center mb-3">Take Photos = live camera · Add from Roll = pick many from your gallery</p>
     <input type="file" id="file-input" accept="image/*" multiple class="hidden">
-
-    <!-- Rapid Shoot Button (in-app camera, shown when getUserMedia available) -->
-    <button id="rapid-shoot-btn" onclick="openCamera()" style="display:none"
-            class="block w-full py-4 bg-white border-2 border-duke-teal text-duke-teal text-center text-base font-bold rounded-xl cursor-pointer active:bg-duke-teal/10 transition-colors mb-3">
-        📷 Rapid Shoot (Live Camera)
-    </button>
-
-    <!-- Camera Button (single shot fallback) -->
-    <label for="camera-input" id="camera-label"
-           class="block w-full py-3 bg-gray-100 text-gray-600 text-center text-sm font-semibold rounded-xl cursor-pointer active:bg-gray-200 transition-colors mb-3">
-        📷 Take Single Photo
-    </label>
     <input type="file" id="camera-input" accept="image/*" capture="environment" class="hidden">
 
     <!-- Drop Zone (desktop) -->
@@ -600,6 +594,13 @@
         return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
     }
 
+    // Unified capture entry (matches inspection's "Take Photos"): live-camera
+    // burst where getUserMedia is available, else the native camera app.
+    function takePhotos() {
+        if (hasGetUserMedia()) { openCamera(); }
+        else { document.getElementById('camera-input').click(); }
+    }
+
     function openCamera() {
         var overlay = document.getElementById('camera-overlay');
         overlay.style.display = 'flex';
@@ -723,9 +724,7 @@
     }
 
     // ─── Feature Detection ─────────────────────────────
-    if (hasGetUserMedia()) {
-        document.getElementById('rapid-shoot-btn').style.display = 'block';
-    }
+    // (Take Photos routes to the live camera via takePhotos(); no separate button to reveal.)
     // Show drag-drop zone on desktop (non-touch or wide screen)
     if (!('ontouchstart' in window) || window.innerWidth >= 768) {
         document.getElementById('drop-area').classList.remove('hidden');
