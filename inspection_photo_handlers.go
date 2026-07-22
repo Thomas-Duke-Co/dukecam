@@ -96,23 +96,23 @@ func (a *App) UploadInspectionItemPhoto(c echo.Context) error {
 	thumbPath := filepath.Join(a.config.ThumbPath, slug, dateDir, uniqueName)
 
 	if processed.Processed {
-		quality := 95
-		if ext == ".png" {
-			quality = 0 // lossless for PNG
-		}
-		if err := SaveImage(processed.Image, photoPath, quality); err != nil {
-			log.Printf("save inspection photo error: %v", err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "save failed"})
-		}
-
 		thumbQuality := 80
 		if ext == ".png" {
 			thumbQuality = 0
 		}
-		if err := SaveImage(processed.Thumb, thumbPath, thumbQuality); err != nil {
-			log.Printf("save inspection thumb error: %v", err)
-			thumbPath = "" // Non-fatal
+		if processed.NeedsTranscode {
+			// HEIC/HEIF must become a JPEG to be servable.
+			if err := SaveImage(processed.Image, photoPath, 95); err != nil {
+				log.Printf("save inspection photo error: %v", err)
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "save failed"})
+			}
+		} else if err := SaveRaw(data, photoPath); err != nil {
+			// Store the upload byte-for-byte: lossless, and no encode on the
+			// request path.
+			log.Printf("save inspection photo error: %v", err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "save failed"})
 		}
+		a.thumbs.Enqueue(data, thumbPath, thumbQuality)
 	} else {
 		// Can't process (e.g., HEIC) — save raw bytes
 		if err := SaveRaw(data, photoPath); err != nil {
@@ -261,23 +261,20 @@ func (a *App) UploadInspectionPhoto(c echo.Context) error {
 	thumbPath := filepath.Join(a.config.ThumbPath, slug, dateDir, uniqueName)
 
 	if processed.Processed {
-		quality := 95
-		if ext == ".png" {
-			quality = 0
-		}
-		if err := SaveImage(processed.Image, photoPath, quality); err != nil {
-			log.Printf("save inspection photo error: %v", err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "save failed"})
-		}
-
 		thumbQuality := 80
 		if ext == ".png" {
 			thumbQuality = 0
 		}
-		if err := SaveImage(processed.Thumb, thumbPath, thumbQuality); err != nil {
-			log.Printf("save inspection thumb error: %v", err)
-			thumbPath = ""
+		if processed.NeedsTranscode {
+			if err := SaveImage(processed.Image, photoPath, 95); err != nil {
+				log.Printf("save inspection photo error: %v", err)
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "save failed"})
+			}
+		} else if err := SaveRaw(data, photoPath); err != nil {
+			log.Printf("save inspection photo error: %v", err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "save failed"})
 		}
+		a.thumbs.Enqueue(data, thumbPath, thumbQuality)
 	} else {
 		if err := SaveRaw(data, photoPath); err != nil {
 			log.Printf("save raw inspection photo error: %v", err)
@@ -579,22 +576,20 @@ func (a *App) UploadInspectionItemPhotoHTMX(c echo.Context) error {
 	thumbPath := filepath.Join(a.config.ThumbPath, "inspections", dateDir, uniqueName)
 
 	if processed.Processed {
-		quality := 95
-		if ext == ".png" {
-			quality = 0
-		}
-		if err := SaveImage(processed.Image, photoPath, quality); err != nil {
-			log.Printf("save inspection photo error: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError, "save failed")
-		}
 		thumbQuality := 80
 		if ext == ".png" {
 			thumbQuality = 0
 		}
-		if err := SaveImage(processed.Thumb, thumbPath, thumbQuality); err != nil {
-			log.Printf("save inspection thumb error: %v", err)
-			thumbPath = ""
+		if processed.NeedsTranscode {
+			if err := SaveImage(processed.Image, photoPath, 95); err != nil {
+				log.Printf("save inspection photo error: %v", err)
+				return echo.NewHTTPError(http.StatusInternalServerError, "save failed")
+			}
+		} else if err := SaveRaw(data, photoPath); err != nil {
+			log.Printf("save inspection photo error: %v", err)
+			return echo.NewHTTPError(http.StatusInternalServerError, "save failed")
 		}
+		a.thumbs.Enqueue(data, thumbPath, thumbQuality)
 	} else {
 		if err := SaveRaw(data, photoPath); err != nil {
 			log.Printf("save raw inspection photo error: %v", err)
@@ -975,22 +970,20 @@ func (a *App) UploadAdhocItemPhotoHTMX(c echo.Context) error {
 	thumbPath := filepath.Join(a.config.ThumbPath, "inspections", dateDir, uniqueName)
 
 	if processed.Processed {
-		quality := 95
-		if ext == ".png" {
-			quality = 0
-		}
-		if err := SaveImage(processed.Image, photoPath, quality); err != nil {
-			log.Printf("save adhoc inspection photo error: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError, "save failed")
-		}
 		thumbQuality := 80
 		if ext == ".png" {
 			thumbQuality = 0
 		}
-		if err := SaveImage(processed.Thumb, thumbPath, thumbQuality); err != nil {
-			log.Printf("save adhoc inspection thumb error: %v", err)
-			thumbPath = ""
+		if processed.NeedsTranscode {
+			if err := SaveImage(processed.Image, photoPath, 95); err != nil {
+				log.Printf("save adhoc inspection photo error: %v", err)
+				return echo.NewHTTPError(http.StatusInternalServerError, "save failed")
+			}
+		} else if err := SaveRaw(data, photoPath); err != nil {
+			log.Printf("save adhoc inspection photo error: %v", err)
+			return echo.NewHTTPError(http.StatusInternalServerError, "save failed")
 		}
+		a.thumbs.Enqueue(data, thumbPath, thumbQuality)
 	} else {
 		if err := SaveRaw(data, photoPath); err != nil {
 			log.Printf("save raw adhoc inspection photo error: %v", err)

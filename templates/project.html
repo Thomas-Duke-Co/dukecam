@@ -165,6 +165,7 @@
         <button onclick="rotateCurrentPhoto('ccw')" title="Rotate left" class="px-2.5 py-1.5 bg-white/20 rounded-lg text-sm hover:bg-white/30 transition-colors">↺</button>
         <button onclick="rotateCurrentPhoto('cw')" title="Rotate right" class="px-2.5 py-1.5 bg-white/20 rounded-lg text-sm hover:bg-white/30 transition-colors">↻</button>
         <button onclick="toggleLightboxEdit()" id="lb-edit-btn" class="px-3 py-1.5 bg-white/20 rounded-lg text-sm font-semibold hover:bg-white/30 transition-colors">Edit</button>
+        <button id="lb-delete-btn" onclick="deleteCurrentPhoto()" title="Delete photo" class="px-3 py-1.5 bg-red-600/80 rounded-lg text-sm font-semibold hover:bg-red-600 transition-colors disabled:opacity-50">Delete</button>
     </div>
     <!-- Edit Panel -->
     <div id="lb-edit-panel" class="hidden px-4 py-3 bg-gray-900 border-b border-gray-700">
@@ -583,6 +584,85 @@
             img.style.opacity = '1';
             showToast('Rotate failed: ' + err.message, 'error');
         });
+    }
+
+    // ─── Delete Photo ────────────────────────────────────
+    function deleteCurrentPhoto() {
+        var p = photos[currentPhoto];
+        if (!p) return;
+        if (!confirm('Delete this photo? This cannot be undone.')) return;
+
+        var btn = document.getElementById('lb-delete-btn');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '…';
+        }
+
+        fetch('/api/photo/' + p.id, { method: 'DELETE' })
+            .then(function(res) {
+                if (!res.ok) throw new Error('Delete failed');
+                return res.json();
+            })
+            .then(function() {
+                var idx = currentPhoto;
+                var tiles = document.querySelectorAll('.photo-tile');
+                var tile = tiles[idx];
+
+                // Remove tile; if it was the last photo in its day group, drop the group.
+                if (tile) {
+                    var grid = tile.parentElement;
+                    tile.remove();
+                    if (grid && grid.querySelectorAll('.photo-tile').length === 0) {
+                        var dayBlock = grid.closest('.mb-6');
+                        if (dayBlock) dayBlock.remove();
+                    }
+                }
+
+                photos.splice(idx, 1);
+
+                // Update "Photos (N)" heading
+                var heading = document.querySelector('.px-4.pb-6 > h2');
+                if (heading) {
+                    heading.textContent = '📸 Photos (' + photos.length + ')';
+                }
+
+                // Update per-day counts still on the page
+                document.querySelectorAll('.mb-6').forEach(function(block) {
+                    var countEl = block.querySelector('.text-sm.text-gray-500.font-semibold');
+                    var dayTiles = block.querySelectorAll('.photo-tile');
+                    if (countEl) {
+                        countEl.textContent = dayTiles.length + ' photo' + (dayTiles.length === 1 ? '' : 's');
+                    }
+                });
+
+                if (photos.length === 0) {
+                    closeLightbox();
+                    var gallery = document.querySelector('.px-4.pb-6');
+                    if (gallery && !gallery.querySelector('.photo-tile')) {
+                        var empty = document.createElement('div');
+                        empty.className = 'text-center py-12 text-gray-500';
+                        empty.innerHTML = '<div class="text-5xl mb-2">📷</div><p class="text-base">No photos yet. Be the first!</p>';
+                        gallery.querySelectorAll('.mb-6').forEach(function(el) { el.remove(); });
+                        gallery.appendChild(empty);
+                    }
+                    showToast('Photo deleted', 'success');
+                    return;
+                }
+
+                // Stay on the same index (next photo slides into place), or previous if at end
+                if (idx >= photos.length) idx = photos.length - 1;
+                showPhoto(idx);
+                showToast('Photo deleted', 'success');
+            })
+            .catch(function(err) {
+                showToast('Delete failed: ' + err.message, 'error');
+            })
+            .finally(function() {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Delete';
+                }
+            });
     }
 
     // ─── Rapid-Shoot Camera ────────────────────────────

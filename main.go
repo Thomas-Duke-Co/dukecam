@@ -40,6 +40,7 @@ type App struct {
 	fyxt       *FyxtClient
 	propertyOS *PropertyOSClient
 	posDB      *POSDB
+	thumbs     *ThumbQueue
 }
 
 func loadConfig() Config {
@@ -106,6 +107,7 @@ func (a *App) registerRoutes(e *echo.Echo) {
 	e.GET("/api/photos/:slug", a.GetPhotos)
 	e.PATCH("/api/photo/:id", a.UpdatePhoto)
 	e.POST("/api/photo/:id/rotate", a.RotatePhoto)
+	e.DELETE("/api/photo/:id", a.DeletePhoto)
 
 	// PropertyOS ingest (claudecode-u61f) — server-to-server, bearer-token gated.
 	// Consumed by PropertyOS's /api/buildings/[id]/photos proxy.
@@ -266,7 +268,12 @@ func main() {
 		defer posDB.Close()
 	}
 
-	app := &App{config: cfg, db: db, fyxt: fyxt, propertyOS: pos, posDB: posDB}
+	// 2 workers on a 4-core box shared with 59 other containers: enough to keep
+	// up with burst uploads without starving request handling.
+	thumbs := NewThumbQueue(2, 256)
+	defer thumbs.Shutdown()
+
+	app := &App{config: cfg, db: db, fyxt: fyxt, propertyOS: pos, posDB: posDB, thumbs: thumbs}
 
 	// Echo
 	e := echo.New()

@@ -7,6 +7,7 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -85,22 +86,23 @@ func (a *App) storeUploadedPhoto(c echo.Context, project *Project, file *multipa
 	thumbPath := filepath.Join(a.config.ThumbPath, project.Slug, dateDir, uniqueName)
 
 	if processed.Processed {
-		quality := 95
-		if ext == ".png" {
-			quality = 0
-		}
-		if err := SaveImage(processed.Image, photoPath, quality); err != nil {
-			log.Printf("save photo error: %v", err)
-			return nil, http.StatusInternalServerError, "save failed"
-		}
 		thumbQuality := 80
 		if ext == ".png" {
 			thumbQuality = 0
 		}
-		if err := SaveImage(processed.Thumb, thumbPath, thumbQuality); err != nil {
-			log.Printf("save thumb error: %v", err)
-			thumbPath = "" // non-fatal — continue without thumb
+		if processed.NeedsTranscode {
+			// HEIC/HEIF must become a JPEG to be servable.
+			if err := SaveImage(processed.Image, photoPath, 95); err != nil {
+				log.Printf("save photo error: %v", err)
+				return nil, http.StatusInternalServerError, "save failed"
+			}
+		} else if err := SaveRaw(data, photoPath); err != nil {
+			// Store the upload byte-for-byte: lossless, and no encode on the
+			// request path.
+			log.Printf("save photo error: %v", err)
+			return nil, http.StatusInternalServerError, "save failed"
 		}
+		a.thumbs.Enqueue(data, thumbPath, thumbQuality)
 	} else {
 		if err := SaveRaw(data, photoPath); err != nil {
 			log.Printf("save raw error: %v", err)
@@ -566,6 +568,41 @@ func (a *App) RotatePhoto(c echo.Context) error {
 	a.db.UpdatePhotoDimensions(ctx, id, newW, newH)
 
 	log.Printf("rotated photo: id=%d direction=%s new=%dx%d", id, body.Direction, newW, newH)
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// ─── Delete Photo ────────────────────────────────────────────────
+
+// DELETE /api/photo/:id — remove a project photo (DB row + full-size + thumb).
+func (a *App) DeletePhoto(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid photo id"})
+	}
+
+	photo, err := a.db.GetPhotoByID(ctx, id)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "photo not found"})
+	}
+
+	if err := a.db.DeletePhoto(ctx, id); err != nil {
+		log.Printf("delete photo error: id=%d err=%v", id, err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "delete failed"})
+	}
+
+	// Best-effort file cleanup — row is already gone.
+	if err := os.Remove(photo.StoragePath); err != nil && !os.IsNotExist(err) {
+		log.Printf("remove photo file warning: id=%d path=%s err=%v", id, photo.StoragePath, err)
+	}
+	if photo.ThumbPath != nil && *photo.ThumbPath != "" {
+		if err := os.Remove(*photo.ThumbPath); err != nil && !os.IsNotExist(err) {
+			log.Printf("remove thumb file warning: id=%d path=%s err=%v", id, *photo.ThumbPath, err)
+		}
+	}
+
+	log.Printf("photo deleted: id=%d file=%s project=%d", id, photo.Filename, photo.ProjectID)
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 

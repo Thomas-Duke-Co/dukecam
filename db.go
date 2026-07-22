@@ -669,6 +669,19 @@ func (db *DB) UpdatePhotoAnnotations(ctx context.Context, photoID int, caption, 
 	return err
 }
 
+// DeletePhoto removes a project photo row. Caller is responsible for cleaning up
+// storage_path / thumb_path files after a successful delete.
+func (db *DB) DeletePhoto(ctx context.Context, id int) error {
+	result, err := db.pool.Exec(ctx, `DELETE FROM photos WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete photo: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("photo %d not found", id)
+	}
+	return nil
+}
+
 // ─── Admin Queries ───────────────────────────────────────────────
 
 func (db *DB) ListAllProjects(ctx context.Context) ([]AdminProject, error) {

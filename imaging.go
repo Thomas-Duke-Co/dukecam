@@ -24,14 +24,18 @@ type EXIFData struct {
 	TakenAt *time.Time
 }
 
-// ProcessedImage holds the result of image processing.
+// ProcessedImage holds the result of inspecting an upload.
 type ProcessedImage struct {
-	Image     image.Image
-	Thumb     image.Image
+	Image     image.Image // only populated when a transcode is required (HEIC/HEIF)
 	EXIF      EXIFData
 	Width     int
 	Height    int
-	Processed bool // false if image couldn't be decoded (e.g., HEIC)
+	Processed bool // false if the image couldn't be read at all
+
+	// NeedsTranscode is true for formats browsers can't render (HEIC/HEIF).
+	// Those must be re-encoded to JPEG before they're servable; everything
+	// else is stored byte-for-byte as uploaded.
+	NeedsTranscode bool
 }
 
 // ExtractEXIF reads GPS and DateTime from EXIF data.
@@ -57,31 +61,74 @@ func ExtractEXIF(data []byte) EXIFData {
 	return result
 }
 
-// ProcessUpload decodes, orients, and creates a thumbnail from uploaded image data.
+// ProcessUpload inspects an upload without decoding its pixel data.
+//
+// This used to fully decode the image and render a thumbnail on the caller's
+// goroutine, then re-encode the full-resolution image at q=95 to store it —
+// roughly 120ms per megapixel, so ~2.4s of the client's wait for a 24 MP phone
+// photo, and a generation of quality lost on every "original". Dimensions now
+// come from the image header and thumbnails render asynchronously.
 func ProcessUpload(data []byte) (*ProcessedImage, error) {
-	reader := bytes.NewReader(data)
+	// EXIF comes from the original bytes, before any transform.
+	exifData := ExtractEXIF(data)
 
-	// Decode with auto-orientation
-	img, err := imaging.Decode(reader, imaging.AutoOrientation(true))
+	// DecodeConfig reads only the header — microseconds, not milliseconds.
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
-		// Can't decode — store raw, no processing
+		// Unreadable or an unregistered format — store raw, no thumbnail.
 		return &ProcessedImage{Processed: false}, nil
 	}
 
-	// Extract EXIF from original bytes (before any transforms)
-	exifData := ExtractEXIF(data)
+	w, h := cfg.Width, cfg.Height
+	// EXIF orientations 5-8 transpose the image, so the displayed dimensions
+	// are the reverse of the stored ones.
+	if o := exifOrientation(data); o >= 5 && o <= 8 {
+		w, h = h, w
+	}
 
-	// Create thumbnail (400x400 max, preserving aspect ratio)
-	thumb := imaging.Fit(img, 400, 400, imaging.Lanczos)
+	p := &ProcessedImage{EXIF: exifData, Width: w, Height: h, Processed: true}
 
-	return &ProcessedImage{
-		Image:     img,
-		Thumb:     thumb,
-		EXIF:      exifData,
-		Width:     img.Bounds().Dx(),
-		Height:    img.Bounds().Dy(),
-		Processed: true,
-	}, nil
+	// HEIC/HEIF isn't renderable in browsers, so it still needs a real decode
+	// and a JPEG re-encode. Rare in practice — 2 of 4,361 stored files.
+	if format == "heic" || format == "heif" {
+		img, derr := imaging.Decode(bytes.NewReader(data), imaging.AutoOrientation(true))
+		if derr != nil {
+			return &ProcessedImage{Processed: false}, nil
+		}
+		p.Image = img
+		p.Width, p.Height = img.Bounds().Dx(), img.Bounds().Dy()
+		p.NeedsTranscode = true
+	}
+
+	return p, nil
+}
+
+// exifOrientation returns the EXIF orientation tag, defaulting to 1 (normal)
+// when absent or unreadable.
+func exifOrientation(data []byte) int {
+	x, err := exif.Decode(bytes.NewReader(data))
+	if err != nil {
+		return 1
+	}
+	t, err := x.Get(exif.Orientation)
+	if err != nil {
+		return 1
+	}
+	v, err := t.Int(0)
+	if err != nil {
+		return 1
+	}
+	return v
+}
+
+// MakeThumbFromBytes decodes an upload and writes its 400x400 thumbnail.
+// This is the expensive call — run it off the request path via ThumbQueue.
+func MakeThumbFromBytes(data []byte, thumbPath string, quality int) error {
+	img, err := imaging.Decode(bytes.NewReader(data), imaging.AutoOrientation(true))
+	if err != nil {
+		return fmt.Errorf("decode: %w", err)
+	}
+	return SaveImage(imaging.Fit(img, 400, 400, imaging.Lanczos), thumbPath, quality)
 }
 
 // SaveImage writes an image to disk as JPEG or PNG based on extension.
