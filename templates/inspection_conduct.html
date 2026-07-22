@@ -125,6 +125,25 @@
     </div>
 </div>
 
+<!-- Photos-first action bar — no categories required, one tap to shoot -->
+{{if ne .Inspection.Status "completed"}}
+<div class="px-4 pt-4 pb-2">
+    <div class="grid grid-cols-2 gap-2">
+        <button type="button" onclick="quickPhotos()"
+                class="py-4 bg-duke-teal text-white text-sm font-bold rounded-xl shadow-lg active:bg-duke-dark transition-colors flex items-center justify-center gap-1.5">
+            📷 Take Photos
+        </button>
+        <!-- label-for keeps the user gesture (iOS won't open picker after async fetch) -->
+        <label for="roll-input"
+               class="py-4 bg-white border-2 border-duke-teal text-duke-teal text-sm font-bold rounded-xl shadow active:bg-duke-teal/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
+            🖼️ Add from Roll
+        </label>
+    </div>
+    <input type="file" id="roll-input" accept="image/*" multiple class="file-input-ios">
+    <p class="text-[11px] text-gray-400 text-center mt-2">No setup needed — just shoot. Photos land in Walk-through.</p>
+</div>
+{{end}}
+
 <!-- Checklist categories -->
 <div class="px-4 py-4 space-y-6 pb-24">
     {{if .RenderedCategories}}
@@ -133,7 +152,7 @@
         <!-- Category header -->
         <div class="flex items-center gap-2 mb-3">
             <h2 class="text-sm font-bold text-duke-dark uppercase tracking-wide">{{.Name}}</h2>
-            <span class="text-[10px] text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">{{.ItemCount}} items</span>
+            <span class="text-[10px] text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">{{.ItemCount}} {{if eq .ItemCount 1}}item{{else}}items{{end}}</span>
         </div>
 
         <!-- Items (pre-rendered server-side) -->
@@ -143,47 +162,32 @@
     </div>
     {{end}}
     {{else}}
-    <div class="text-center py-12 text-gray-400">
+    <div class="text-center py-10 text-gray-400">
         <svg class="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
         </svg>
-        <p class="text-sm">Blank inspection</p>
-        <p class="text-xs mt-1">Tap <span class="font-semibold text-duke-teal">Take Photos</span> below to start shooting</p>
+        <p class="text-sm font-medium text-gray-500">Ready to shoot</p>
+        <p class="text-xs mt-1">Tap <span class="font-semibold text-duke-teal">Take Photos</span> or <span class="font-semibold text-duke-teal">Add from Roll</span> above</p>
     </div>
     {{end}}
 
-    <!-- Ad-hoc item form (add items beyond the template) -->
+    <!-- Optional checklist item (collapsed — photos don't require this) -->
     {{if ne .Inspection.Status "completed"}}
-    <div class="mt-6">
-        <!-- Rapid camera photos + bulk import from the camera roll -->
-        <div class="grid grid-cols-2 gap-2 mb-4">
-            <button onclick="quickPhotos()"
-                    class="py-4 bg-duke-teal text-white text-sm font-bold rounded-xl shadow-lg active:bg-duke-dark transition-colors flex items-center justify-center gap-1.5">
-                📷 Take Photos
-            </button>
-            <button onclick="addFromRoll()"
-                    class="py-4 bg-white border-2 border-duke-teal text-duke-teal text-sm font-bold rounded-xl shadow active:bg-duke-teal/10 transition-colors flex items-center justify-center gap-1.5">
-                🖼️ Add from Roll
-            </button>
-        </div>
-        <input type="file" id="roll-input" accept="image/*" multiple class="hidden">
-        <p class="text-[11px] text-gray-400 text-center -mt-2 mb-4">Take Photos = live camera · Add from Roll = pick a batch you already shot</p>
-
+    <div class="mt-2">
         <div class="flex items-center gap-2 mb-3">
-            <h2 class="text-sm font-bold text-duke-dark uppercase tracking-wide">Add Item</h2>
+            <h2 class="text-sm font-bold text-duke-dark uppercase tracking-wide">Add Checklist Item</h2>
             <span class="text-[10px] text-gray-400 bg-gray-50 rounded-full px-2 py-0.5 font-medium">optional</span>
         </div>
 
-        <!-- Toggle button to show/hide form -->
         <button id="adhoc-toggle-btn" onclick="document.getElementById('adhoc-form').classList.toggle('hidden'); this.classList.toggle('hidden');"
                 class="w-full border-2 border-dashed border-gray-300 rounded-xl py-3 text-sm text-gray-400 hover:border-indigo-300 hover:text-indigo-500 transition-colors active:scale-[0.98] flex items-center justify-center gap-2">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
             </svg>
-            Add checklist item
+            Add item to check later
         </button>
 
-        <!-- Inline form (hidden by default) -->
         <form id="adhoc-form" class="hidden border border-indigo-200 bg-indigo-50/30 rounded-xl p-4 space-y-3"
               hx-post="/api/inspections/{{.Inspection.ID}}/adhoc"
               hx-target="#adhoc-items-list"
@@ -191,22 +195,17 @@
               hx-on::after-request="if(event.detail.successful){this.reset(); document.getElementById('adhoc-toggle-btn').classList.remove('hidden'); this.classList.add('hidden');}">
 
             <div>
-                <label class="block text-xs font-semibold text-duke-dark mb-1">Item name <span class="text-red-400">*</span></label>
-                <input type="text" name="label" required placeholder="e.g. Check fire extinguisher expiry"
+                <label class="block text-xs font-semibold text-duke-dark mb-1">What to check <span class="text-red-400">*</span></label>
+                <input type="text" name="label" required placeholder="e.g. Roof leak near unit 12"
                        class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none">
             </div>
 
             <div>
-                <label class="block text-xs font-semibold text-duke-dark mb-1">Description <span class="text-gray-400 font-normal">(optional)</span></label>
-                <input type="text" name="description" placeholder="Brief note about what to check"
+                <label class="block text-xs font-semibold text-duke-dark mb-1">Note <span class="text-gray-400 font-normal">(optional)</span></label>
+                <input type="text" name="description" placeholder="Brief detail"
                        class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none">
             </div>
-
-            <div>
-                <label class="block text-xs font-semibold text-duke-dark mb-1">Category <span class="text-gray-400 font-normal">(optional)</span></label>
-                <input type="text" name="category_name" placeholder="Ad-hoc Items"
-                       class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none">
-            </div>
+            <!-- category defaults server-side to "Ad-hoc Items" — no field needed -->
 
             <div class="flex gap-2 pt-1">
                 <button type="submit"
@@ -221,9 +220,7 @@
             </div>
         </form>
 
-        <!-- Ad-hoc items land here via HTMX -->
-        <div id="adhoc-items-list" class="space-y-2 mt-3">
-        </div>
+        <div id="adhoc-items-list" class="space-y-2 mt-3"></div>
     </div>
     {{end}}
 </div>
@@ -493,10 +490,9 @@
     <img id="lightbox-img" src="" alt="Inspection photo" class="max-w-[95vw] max-h-[90vh] object-contain rounded-lg shadow-2xl" />
 </div>
 
-<!-- ─── Hidden file input for photo capture ─────────────────────── -->
-<input type="file" id="photo-capture-input" accept="image/*" capture="environment" class="hidden" />
-<!-- ─── Dedicated file input for rapid shoot (separate to avoid HTMX conflicts) ─── -->
-<input type="file" id="rapid-shoot-input" accept="image/*" capture="environment" class="hidden" />
+<!-- File inputs: file-input-ios (NOT display:none) so iOS Safari will open the picker -->
+<input type="file" id="photo-capture-input" accept="image/*" capture="environment" class="file-input-ios" />
+<input type="file" id="rapid-shoot-input" accept="image/*" capture="environment" class="file-input-ios" />
 
 <script src="/static/js/inspection-offline.js?v=1"></script>
 <script src="/static/js/inspection_sync.js?v=1"></script>
@@ -958,51 +954,56 @@ document.getElementById('photo-capture-input').addEventListener('change', async 
     });
 })();
 
-// ─── Rapid Shoot ────────────────────────────────────────────────
-// One-tap rapid photos: get-or-create a "Walk-through Photos" bucket and drop
-// straight into rapid-shoot — no form, no naming. Optional label starts a group.
+// ─── Rapid Shoot / Roll import ──────────────────────────────────
+// CRITICAL iOS rule: file-input .click() MUST run synchronously inside the
+// tap handler. Any await/fetch first kills the user-gesture and the picker
+// silently does nothing. So we open the picker immediately, and resolve the
+// Walk-through bucket in parallel (queue uploads until the id lands).
 var INSPECTION_ID = {{.Inspection.ID}};
 
-// get-or-create the photo bucket, return its id (Promise)
 function quickBucketId(label) {
     var fd = new FormData();
     if (label) fd.append('label', label);
     return fetch('/api/inspections/' + INSPECTION_ID + '/quick-bucket', { method: 'POST', body: fd })
-        .then(function(r){ return r.ok ? r.json() : Promise.reject(); })
-        .then(function(d){ return (d && d.item_id) ? d.item_id : Promise.reject(); });
+        .then(function(r){ return r.ok ? r.json() : Promise.reject(new Error('bucket ' + r.status)); })
+        .then(function(d){ return (d && d.item_id) ? d.item_id : Promise.reject(new Error('no item_id')); });
 }
+
+// One-tap rapid photos — open camera FIRST, bucket in background.
 function quickPhotos(label) {
-    quickBucketId(label)
-        .then(function(itemId){ startRapidShoot(INSPECTION_ID, itemId, true); })
-        .catch(function(){ alert('Could not start photos — check your connection and try again.'); });
+    startRapidShoot(INSPECTION_ID, null, true, label || null);
 }
 function newPhotoGroup() {
     var name = (prompt('Name this group (e.g. Roof, Parking lot, Suite 6017):', '') || '').trim();
     if (name) quickPhotos(name);
 }
 
-// Bulk import: pick a batch from the camera roll into the walk-through bucket
-function addFromRoll() {
-    quickBucketId(null)
-        .then(function(itemId){
-            var input = document.getElementById('roll-input');
-            if (!input) return;
-            input.dataset.bucket = itemId;
-            input.value = '';
-            input.click();
-        })
-        .catch(function(){ alert('Could not start upload — check your connection and try again.'); });
-}
+// Add-from-Roll uses a <label for=roll-input> so the picker opens on the tap
+// itself (no JS click). We just upload whatever they pick into the bucket.
 (function(){
     var roll = document.getElementById('roll-input');
     if (!roll) return; // completed inspection: no upload UI
+    // Pre-warm the default bucket so uploads don't wait on first pick
+    quickBucketId(null).then(function(id){ roll.dataset.bucket = String(id); }).catch(function(){});
     roll.addEventListener('change', function() {
         var files = Array.prototype.slice.call(this.files || []);
-        var bucketId = this.dataset.bucket;
         this.value = '';
-        if (files.length && bucketId) uploadRollBatch(files, bucketId);
+        if (!files.length) return;
+        var bucketId = this.dataset.bucket ? parseInt(this.dataset.bucket, 10) : 0;
+        if (bucketId) {
+            uploadRollBatch(files, bucketId);
+            return;
+        }
+        // Bucket not ready yet — create it, then upload
+        quickBucketId(null)
+            .then(function(id){
+                roll.dataset.bucket = String(id);
+                uploadRollBatch(files, id);
+            })
+            .catch(function(){ alert('Could not start upload — check your connection and try again.'); });
     });
 })();
+
 function uploadRollBatch(files, bucketId) {
     var total = files.length, processed = 0, failed = 0, idx = 0, active = 0, MAX = 3;
     var bar = document.getElementById('rapid-shoot-bar');
@@ -1032,19 +1033,68 @@ function uploadRollBatch(files, bucketId) {
 // a burst of photos without returning to the checklist each time.
 var _rs = null;
 
-function startRapidShoot(inspectionId, itemId, isAdhoc) {
+// itemId may be null: bucket is still being created. Files queue until it lands.
+function startRapidShoot(inspectionId, itemId, isAdhoc, label) {
     if (_rs && _rs.active) stopRapidShoot();
-    _rs = { inspectionId: inspectionId, itemId: itemId, isAdhoc: isAdhoc, count: 0, uploading: 0, active: true };
+    _rs = {
+        inspectionId: inspectionId,
+        itemId: itemId || null,
+        isAdhoc: !!isAdhoc,
+        count: 0,
+        uploading: 0,
+        active: true,
+        pending: [], // File[] waiting for itemId
+        label: label || null
+    };
     document.getElementById('rapid-shoot-bar').classList.remove('hidden');
     _rsUpdateUI();
+
+    // Open the camera SYNCHRONOUSLY while we still have the user gesture.
     _rsTriggerCapture();
+
+    // Resolve bucket in background if we don't have one yet.
+    if (!_rs.itemId && isAdhoc) {
+        quickBucketId(label || null)
+            .then(function(id){
+                if (!_rs || !_rs.active) return;
+                _rs.itemId = id;
+                // Flush anything shot before the bucket arrived
+                var q = _rs.pending.splice(0);
+                q.forEach(function(f){ _rsUploadFile(f); });
+            })
+            .catch(function(){
+                if (!_rs) return;
+                alert('Could not start photos — check your connection and try again.');
+                stopRapidShoot();
+            });
+    }
 }
 
 function _rsTriggerCapture() {
     if (!_rs || !_rs.active) return;
     var input = document.getElementById('rapid-shoot-input');
+    if (!input) return;
     input.value = '';
     input.click();
+}
+
+function _rsUploadFile(file) {
+    if (!_rs) return;
+    if (!_rs.itemId) {
+        // Bucket not ready — hold the file
+        _rs.pending.push(file);
+        return;
+    }
+    _rs.uploading++;
+    _rsUpdateUI();
+    var formData = new FormData();
+    formData.append('photo', file);
+    var url = _rs.isAdhoc
+        ? '/api/inspections/' + _rs.inspectionId + '/adhoc/' + _rs.itemId + '/photo'
+        : '/api/inspections/' + _rs.inspectionId + '/item/' + _rs.itemId + '/photo';
+    fetch(url, { method: 'POST', body: formData })
+        .then(function() { if (_rs) { _rs.uploading--; _rsUpdateUI(); } })
+        .catch(function() { if (_rs) { _rs.uploading--; _rsUpdateUI(); } });
 }
 
 document.getElementById('rapid-shoot-input').addEventListener('change', function(e) {
@@ -1052,22 +1102,13 @@ document.getElementById('rapid-shoot-input').addEventListener('change', function
     if (!file || !_rs || !_rs.active) return;
 
     _rs.count++;
-    _rs.uploading++;
     _rsUpdateUI();
+    _rsUploadFile(file);
 
-    // Upload in background via fetch (not HTMX — avoids swapping the gallery mid-session)
-    var formData = new FormData();
-    formData.append('photo', file);
-    var url = _rs.isAdhoc
-        ? '/api/inspections/' + _rs.inspectionId + '/adhoc/' + _rs.itemId + '/photo'
-        : '/api/inspections/' + _rs.inspectionId + '/item/' + _rs.itemId + '/photo';
-
-    fetch(url, { method: 'POST', body: formData })
-        .then(function() { if (_rs) { _rs.uploading--; _rsUpdateUI(); } })
-        .catch(function() { if (_rs) { _rs.uploading--; _rsUpdateUI(); } });
-
-    // Reopen camera for next shot
-    setTimeout(_rsTriggerCapture, 150);
+    // Reopen camera for next shot. setTimeout is fine here — subsequent opens
+    // are best-effort; iOS may require another tap on some versions, which is
+    // why the floating "Rapid Shoot" bar stays up with a Done button.
+    setTimeout(_rsTriggerCapture, 200);
 });
 
 function _rsUpdateUI() {
@@ -1075,7 +1116,12 @@ function _rsUpdateUI() {
     var countEl = document.getElementById('rapid-shoot-count');
     var uploadEl = document.getElementById('rapid-shoot-uploading');
     if (countEl) countEl.textContent = _rs.count + ' photo' + (_rs.count !== 1 ? 's' : '') + ' taken';
-    if (uploadEl) uploadEl.textContent = _rs.uploading > 0 ? '· syncing ' + _rs.uploading + '...' : '';
+    if (uploadEl) {
+        var bits = [];
+        if (_rs.uploading > 0) bits.push('syncing ' + _rs.uploading);
+        if (_rs.pending && _rs.pending.length) bits.push('waiting for connection');
+        uploadEl.textContent = bits.length ? '· ' + bits.join(' · ') + '...' : '';
+    }
 }
 
 function stopRapidShoot() {
@@ -1086,15 +1132,21 @@ function stopRapidShoot() {
     document.getElementById('rapid-shoot-bar').classList.add('hidden');
     document.getElementById('rapid-shoot-input').value = '';
 
-    // Refresh the gallery for this item once all uploads settle
+    // Always reload after a session with photos so new buckets appear even if
+    // the gallery node wasn't on the page yet (first shot on a blank inspection).
     if (session.count > 0) {
-        var galleryId = session.isAdhoc ? 'photos-adhoc-' + session.itemId : 'photos-' + session.itemId;
-        var galleryEl = document.getElementById(galleryId);
-        if (galleryEl) {
+        var galleryId = session.isAdhoc && session.itemId
+            ? 'photos-adhoc-' + session.itemId
+            : (session.itemId ? 'photos-' + session.itemId : null);
+        var galleryEl = galleryId ? document.getElementById(galleryId) : null;
+        if (galleryEl && session.itemId) {
             var galleryUrl = session.isAdhoc
                 ? '/api/inspections/' + session.inspectionId + '/adhoc/' + session.itemId + '/photos'
                 : '/api/inspections/' + session.inspectionId + '/item/' + session.itemId + '/photos';
             htmx.ajax('GET', galleryUrl, { target: '#' + galleryId, swap: 'outerHTML' });
+        } else {
+            // New bucket / first photos — full reload so the card shows up
+            setTimeout(function(){ window.location.reload(); }, 400);
         }
     }
 }

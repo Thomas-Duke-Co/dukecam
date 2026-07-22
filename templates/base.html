@@ -47,6 +47,23 @@
         .camera-flash { animation: camera-flash 0.25s ease-out forwards; }
         .thumb-strip::-webkit-scrollbar { display: none; }
         .thumb-strip { -ms-overflow-style: none; scrollbar-width: none; }
+        /* iOS Safari refuses to open <input type=file> when display:none.
+           Keep it in the a11y tree but visually gone so label/JS clicks work. */
+        .file-input-ios {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: 0;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+            opacity: 0;
+            pointer-events: none;
+        }
     </style>
     {{template "head" .}}
 </head>

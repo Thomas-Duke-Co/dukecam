@@ -734,33 +734,32 @@ func renderPhotoGalleryHTML(inspectionID, itemID int, photos []InspectionPhoto) 
 		sb.WriteString(`</div>`)
 	}
 
-	// ── Upload button (label triggers hidden file input) + rapid shoot + spinner ──
+	// ── Upload button (input INSIDE label + file-input-ios so iOS opens picker) + rapid shoot ──
 	sb.WriteString(fmt.Sprintf(`
 		<div class="flex items-center gap-2">
-			<label for="%s"
-				class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 bg-gray-50 hover:bg-gray-100 border border-gray-200 border-dashed rounded-lg cursor-pointer transition-colors active:scale-95">
+			<label class="inline-flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold text-duke-teal bg-duke-teal/5 hover:bg-duke-teal/10 border border-duke-teal/30 border-dashed rounded-lg cursor-pointer transition-colors active:scale-95">
 				<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
 				</svg>
 				<span>Add Photo</span>
+				<input type="file" id="%s" name="photo" accept="image/*" capture="environment"
+					class="file-input-ios"
+					hx-post="/api/inspections/%d/item/%d/photo"
+					hx-target="#%s"
+					hx-swap="outerHTML"
+					hx-encoding="multipart/form-data"
+					hx-trigger="change"
+					hx-indicator="#upload-spinner-%d"/>
 			</label>
 			<button type="button" onclick="startRapidShoot(%d, %d, false)"
-				class="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-duke-teal bg-duke-teal/5 hover:bg-duke-teal/10 border border-duke-teal/20 rounded-lg cursor-pointer transition-colors active:scale-95"
+				class="inline-flex items-center gap-1 px-2.5 py-2.5 text-xs font-semibold text-duke-teal bg-white hover:bg-duke-teal/5 border border-duke-teal/30 rounded-lg cursor-pointer transition-colors active:scale-95"
 				title="Rapid Shoot: keep camera open between shots">
 				<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
 					<path d="M11.983 1.907a.75.75 0 00-1.292-.657l-8.5 9.5A.75.75 0 002.75 12h6.572l-1.305 6.093a.75.75 0 001.292.657l8.5-9.5A.75.75 0 0017.25 8h-6.572l1.305-6.093z"/>
 				</svg>
 				Rapid
 			</button>
-			<input type="file" id="%s" name="photo" accept="image/*" capture="environment"
-				class="hidden"
-				hx-post="/api/inspections/%d/item/%d/photo"
-				hx-target="#%s"
-				hx-swap="outerHTML"
-				hx-encoding="multipart/form-data"
-				hx-trigger="change"
-				hx-indicator="#upload-spinner-%d"/>
 			<div id="upload-spinner-%d" class="htmx-indicator">
 				<svg class="animate-spin w-4 h-4 text-duke-teal" fill="none" viewBox="0 0 24 24">
 					<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -768,10 +767,10 @@ func renderPhotoGalleryHTML(inspectionID, itemID int, photos []InspectionPhoto) 
 				</svg>
 			</div>`,
 		inputID,
-		inspectionID, itemID,
-		inputID,
 		inspectionID, itemID, galleryID,
-		itemID, itemID,
+		itemID,
+		inspectionID, itemID,
+		itemID,
 	))
 
 	// Photo count badge
@@ -826,33 +825,32 @@ func renderAdhocPhotoGalleryHTML(inspectionID, adhocItemID int, photos []Inspect
 		sb.WriteString(`</div>`)
 	}
 
-	// ── Upload button + rapid shoot + spinner ──
+	// ── Upload button (input INSIDE label + file-input-ios so iOS opens picker) + rapid shoot ──
 	sb.WriteString(fmt.Sprintf(`
 		<div class="flex items-center gap-2">
-			<label for="%s"
-				class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 bg-gray-50 hover:bg-gray-100 border border-gray-200 border-dashed rounded-lg cursor-pointer transition-colors active:scale-95">
+			<label class="inline-flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold text-duke-teal bg-duke-teal/5 hover:bg-duke-teal/10 border border-duke-teal/30 border-dashed rounded-lg cursor-pointer transition-colors active:scale-95">
 				<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
 				</svg>
 				<span>Add Photo</span>
+				<input type="file" id="%s" name="photo" accept="image/*" capture="environment"
+					class="file-input-ios"
+					hx-post="/api/inspections/%d/adhoc/%d/photo"
+					hx-target="#%s"
+					hx-swap="outerHTML"
+					hx-encoding="multipart/form-data"
+					hx-trigger="change"
+					hx-indicator="#upload-spinner-adhoc-%d"/>
 			</label>
 			<button type="button" onclick="startRapidShoot(%d, %d, true)"
-				class="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-duke-teal bg-duke-teal/5 hover:bg-duke-teal/10 border border-duke-teal/20 rounded-lg cursor-pointer transition-colors active:scale-95"
+				class="inline-flex items-center gap-1 px-2.5 py-2.5 text-xs font-semibold text-duke-teal bg-white hover:bg-duke-teal/5 border border-duke-teal/30 rounded-lg cursor-pointer transition-colors active:scale-95"
 				title="Rapid Shoot: keep camera open between shots">
 				<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
 					<path d="M11.983 1.907a.75.75 0 00-1.292-.657l-8.5 9.5A.75.75 0 002.75 12h6.572l-1.305 6.093a.75.75 0 001.292.657l8.5-9.5A.75.75 0 0017.25 8h-6.572l1.305-6.093z"/>
 				</svg>
 				Rapid
 			</button>
-			<input type="file" id="%s" name="photo" accept="image/*" capture="environment"
-				class="hidden"
-				hx-post="/api/inspections/%d/adhoc/%d/photo"
-				hx-target="#%s"
-				hx-swap="outerHTML"
-				hx-encoding="multipart/form-data"
-				hx-trigger="change"
-				hx-indicator="#upload-spinner-adhoc-%d"/>
 			<div id="upload-spinner-adhoc-%d" class="htmx-indicator">
 				<svg class="animate-spin w-4 h-4 text-duke-teal" fill="none" viewBox="0 0 24 24">
 					<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -860,10 +858,10 @@ func renderAdhocPhotoGalleryHTML(inspectionID, adhocItemID int, photos []Inspect
 				</svg>
 			</div>`,
 		inputID,
-		inspectionID, adhocItemID,
-		inputID,
 		inspectionID, adhocItemID, galleryID,
-		adhocItemID, adhocItemID,
+		adhocItemID,
+		inspectionID, adhocItemID,
+		adhocItemID,
 	))
 
 	// Photo count badge

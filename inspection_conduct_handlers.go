@@ -114,7 +114,7 @@ func (a *App) InspectionConductPage(c echo.Context) error {
 			} else {
 				photos = photosByItem.ByItemID[item.ItemID]
 			}
-			sb.WriteString(renderChecklistItemHTML(checklist.Inspection.ID, item, photos))
+			sb.WriteString(renderChecklistItemHTML(checklist.Inspection.ID, item, photos, cat.Name))
 		}
 		rendered = append(rendered, RenderedCategory{
 			Name:      cat.Name,
@@ -203,7 +203,7 @@ func (a *App) UpdateItemStatusHandler(c echo.Context) error {
 	for _, cat := range checklist.Categories {
 		for _, item := range cat.Items {
 			if item.ItemID == itemID && !item.IsAdhoc {
-				itemHTML = renderChecklistItemHTML(inspectionID, item, itemPhotos)
+				itemHTML = renderChecklistItemHTML(inspectionID, item, itemPhotos, cat.Name)
 				break
 			}
 		}
@@ -382,7 +382,7 @@ func (a *App) CreateAdhocItemHandler(c echo.Context) error {
 	}
 
 	// Return the new item HTML + updated progress bar + reset the form
-	itemHTML := renderChecklistItemHTML(inspectionID, *item, nil)
+	itemHTML := renderChecklistItemHTML(inspectionID, *item, nil, categoryName)
 	stats, _ := a.db.GetInspectionStats(ctx, inspectionID)
 	progressHTML := renderProgressBarHTML(stats)
 
@@ -457,7 +457,20 @@ func (a *App) UpdateAdhocItemStatusHandler(c echo.Context) error {
 
 	adhocPhotos, _ := a.db.GetInspectionPhotosByAdhocItem(ctx, inspectionID, adhocID)
 	stats, _ := a.db.GetInspectionStats(ctx, inspectionID)
-	return c.HTML(http.StatusOK, renderChecklistItemHTML(inspectionID, *item, adhocPhotos)+renderProgressBarHTML(stats))
+	// Prefer the item's stored category when known (Walk-through buckets hide Pass/Fail).
+	catName := "Ad-hoc Items"
+	if item.IsAdhoc {
+		if cats, err := a.db.GetAdhocItems(ctx, inspectionID); err == nil {
+			for _, cat := range cats {
+				for _, it := range cat.Items {
+					if it.ItemID == adhocID {
+						catName = cat.Name
+					}
+				}
+			}
+		}
+	}
+	return c.HTML(http.StatusOK, renderChecklistItemHTML(inspectionID, *item, adhocPhotos, catName)+renderProgressBarHTML(stats))
 }
 
 // DELETE /api/inspections/:id/adhoc/:adhocId — remove an ad-hoc item.
@@ -510,7 +523,8 @@ func renderProgressBarHTML(stats InspectionStats) string {
 // renderChecklistItemHTML produces the HTML for a single checklist item row.
 // Works for both template items and ad-hoc items (uses different status endpoint).
 // photos may be nil (e.g., when returning from status update — photos are lazy-loaded).
-func renderChecklistItemHTML(inspectionID int, item InspectionChecklistItem, photos []InspectionPhoto) string {
+// categoryName is used to hide Pass/Fail chrome on pure photo buckets ("Walk-through").
+func renderChecklistItemHTML(inspectionID int, item InspectionChecklistItem, photos []InspectionPhoto, categoryName string) string {
 	currentStatus := ""
 	if item.Status != nil {
 		currentStatus = string(*item.Status)
@@ -558,14 +572,26 @@ func renderChecklistItemHTML(inspectionID int, item InspectionChecklistItem, pho
 		photoIndicatorHTML = `<span class="inline-flex items-center gap-0.5 text-[10px] text-gray-400 ml-1" title="Photo required"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg></span>`
 	}
 
-	// Ad-hoc badge + delete button
+	// Photo buckets (auto-created by Take Photos / Add from Roll) skip Pass/Fail chrome
+	// and the "+ Ad-hoc" badge — they're just photo groups, not checklist items.
+	photoOnly := item.IsAdhoc && strings.EqualFold(strings.TrimSpace(categoryName), "Walk-through")
+
+	// Ad-hoc badge + delete button (hidden on photo-only buckets)
 	adhocHTML := ""
-	if item.IsAdhoc {
+	if item.IsAdhoc && !photoOnly {
 		adhocHTML = fmt.Sprintf(`
 			<div class="flex items-center gap-1.5 mt-1">
 				<span class="inline-flex items-center text-[10px] text-indigo-600 bg-indigo-50 rounded-full px-2 py-0.5 font-medium">+ Ad-hoc</span>
 				<button hx-delete="/api/inspections/%d/adhoc/%d" hx-target="#%s" hx-swap="outerHTML"
 					hx-confirm="Remove this ad-hoc item?"
+					class="text-[10px] text-gray-400 hover:text-red-500 transition-colors">remove</button>
+			</div>`, inspectionID, item.ItemID, itemDivID)
+	} else if photoOnly {
+		adhocHTML = fmt.Sprintf(`
+			<div class="flex items-center gap-1.5 mt-1">
+				<span class="inline-flex items-center text-[10px] text-duke-teal bg-duke-teal/10 rounded-full px-2 py-0.5 font-medium">photos</span>
+				<button hx-delete="/api/inspections/%d/adhoc/%d" hx-target="#%s" hx-swap="outerHTML"
+					hx-confirm="Remove this photo group and its photos?"
 					class="text-[10px] text-gray-400 hover:text-red-500 transition-colors">remove</button>
 			</div>`, inspectionID, item.ItemID, itemDivID)
 	}
@@ -594,6 +620,20 @@ func renderChecklistItemHTML(inspectionID int, item InspectionChecklistItem, pho
 		borderClass = "border-amber-200 bg-amber-50/30"
 	}
 
+	statusRowHTML := ""
+	if !photoOnly {
+		statusRowHTML = fmt.Sprintf(`
+			<div class="flex gap-2 mt-2.5">
+				%s
+				%s
+				%s
+			</div>`,
+			statusBtn("pass", "Pass", "text-green-700", "bg-green-100 ring-green-400", "✓"),
+			statusBtn("fail", "Fail", "text-red-700", "bg-red-100 ring-red-400", "✗"),
+			statusBtn("needs_attention", "Attention", "text-amber-700", "bg-amber-100 ring-amber-400", "⚠"),
+		)
+	}
+
 	return fmt.Sprintf(`
 		<div id="%s" class="border rounded-xl p-3 %s transition-colors">
 			<div class="flex items-start justify-between gap-2">
@@ -605,11 +645,7 @@ func renderChecklistItemHTML(inspectionID int, item InspectionChecklistItem, pho
 				</div>
 			</div>
 			%s
-			<div class="flex gap-2 mt-2.5">
-				%s
-				%s
-				%s
-			</div>
+			%s
 		</div>`,
 		itemDivID, borderClass,
 		escapeHTML(item.Label), photoIndicatorHTML,
@@ -617,9 +653,7 @@ func renderChecklistItemHTML(inspectionID int, item InspectionChecklistItem, pho
 		adhocHTML,
 		notesHTML,
 		photoGalleryHTML,
-		statusBtn("pass", "Pass", "text-green-700", "bg-green-100 ring-green-400", "✓"),
-		statusBtn("fail", "Fail", "text-red-700", "bg-red-100 ring-red-400", "✗"),
-		statusBtn("needs_attention", "Attention", "text-amber-700", "bg-amber-100 ring-amber-400", "⚠"),
+		statusRowHTML,
 	)
 }
 
